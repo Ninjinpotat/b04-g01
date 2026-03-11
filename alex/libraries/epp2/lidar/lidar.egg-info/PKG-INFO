@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: lidar
+Version: 0.1.0
+Summary: EPP2 LiDAR Library
+Author: EPP2 Teaching Team
+Requires-Python: >=3.6
+Requires-Dist: numpy
+Requires-Dist: matplotlib
+Requires-Dist: pyserial
+Dynamic: author
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
