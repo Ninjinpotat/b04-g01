@@ -97,8 +97,8 @@ void sendResponse(TResponseType resp, uint32_t param) {
   TPacket p;
   p.packetType = PACKET_TYPE_RESPONSE;
   p.command = resp;
-  p.dummy = {0};
-  p.data = {0};
+  // p.dummy = {0};
+  // p.data = {0};
   p.params[0] = param;
   sendPacket(&p);
 }
@@ -131,15 +131,15 @@ void handleCommand(TPacket *pkt) {
 //   STATE_STOPPED + button released -> STATE_RUNNING; stateChanged = true
 //
 ISR(INT1_vect) {
-    bool isPressed = (PIND & (1 << 3));
-    if (buttonState == STATE_RUNNING && isPressed) {
-      buttonState = STATE_STOPPED;
-      stateChanged = true;
-    }
-    else if (buttonState == STATE_STOPPED && !isPressed) {
-      buttonState = STATE_RUNNING;
-      stateChanged = true;
-    }
+  bool isPressed = (PIND & (1 << 3));
+  if (buttonState == STATE_RUNNING && isPressed) {
+    buttonState = STATE_STOPPED;
+    stateChanged = true;
+  }
+  else if (buttonState == STATE_STOPPED && !isPressed) {
+    buttonState = STATE_RUNNING;
+    stateChanged = true;
+  }
 }
 
 // ============================================================

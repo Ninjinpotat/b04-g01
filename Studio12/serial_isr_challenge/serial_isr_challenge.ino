@@ -138,7 +138,7 @@ ISR(USART_UDRE_vect) {
   UDR0 = tx_buf[tx_tail++];
   tx_tail = (tx_tail + 1) & TX_BUFFER_MASK;
   if (tx_tail == tx_head) 
-      UCSR0B &= ~(1 << UDRIE0);
+    UCSR0B &= ~(1 << UDRIE0);
 }
 
 // ============================================================
@@ -179,7 +179,7 @@ bool rxDequeue(uint8_t *data, uint8_t len) {
   if (len > free) 
     return false;
   for (uint8_t i = 0; i < len; i++) {
-    data[i] = rx_buf[rx_tail];
+    data[i] = rx_buf[rx_tail++]; //need to advance rx_tail
     rx_tail = (rx_tail + 1) & RX_BUFFER_MASK;
   }
   UCSR0B |= (1 << RXCIE0);
@@ -206,6 +206,7 @@ ISR(USART_RX_vect) {
   uint8_t temp = UDR0;
   uint8_t next = (rx_head + 1) & RX_BUFFER_MASK;
   if (next != rx_tail) {
+    //if ==, buffer full, discard temp byte
     rx_buf[rx_head] = temp;
     rx_head = next;
   }
@@ -239,14 +240,25 @@ void loop() {
   //   - You should see "Status: RUNNING" printed once per second.
   //   - Press Enter in the Pi terminal to send COMMAND_ESTOP; you should
   //     see "Response: OK" confirming the Arduino received it via the RX ISR.
+
+  // TODO: find out why the compiler says "cannot convert 'TPacket*' to 'uint8_t*'"
+  // I think we need to feed it a pointer to the first byte of TPacket?
+
+  // STRETCH GOAL: modify loop() to call txEnqueue back-to-back without delay,
+  // verify it returns false without corrupting the buffer
+  // Also test sending a lot of packets to the Arduino while it's busy
+  // and verify the Pi continues to receive valid responses
+
   TPacket ptx;
   ptx.packetType = PACKET_TYPE_RESPONSE;
   ptx.command = RESP_STATUS;
+  ptx.dummy = {0}; //not sure if necessary but why not
+  ptx.data = {0};
   ptx.params[0] = STATE_RUNNING;
   while (!txEnqueue((uint8_t*)&ptx, sizeof(TPacket)));
-
+  
   TPacket prx;
-  if (rxDequeue((uint8_t*)&prx, sizeof(TPacket))) {
+  if (rxDequeue(&prx, sizeof(TPacket))) {
     if (prx.packetType == PACKET_TYPE_COMMAND && prx.command == COMMAND_ESTOP) {
       TPacket reply;
       reply.packetType = PACKET_TYPE_RESPONSE;
