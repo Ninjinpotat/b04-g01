@@ -28,7 +28,7 @@
 // TODO (Activity 1, step 2): change this to 1 once txEnqueue(),
 // rxDequeue(), and both ISRs are implemented and working.
 // =============================================================
-#define USE_BAREMETAL_SERIAL 0
+#define USE_BAREMETAL_SERIAL 1
 
 // =============================================================
 // Circular TX / RX buffers (used when USE_BAREMETAL_SERIAL == 1)
@@ -75,14 +75,27 @@ void usartInit(uint16_t ubrr) {
  * interrupt (UDRIE0) and return true.  Must NOT block.
  */
 bool txEnqueue(const uint8_t *data, uint8_t len) {
-    // TODO
-    return false;
+    uint8_t free = (tx_tail - tx_head - 1) & TX_BUFFER_MASK;
+    if (len > free) 
+        return false;
+    for (uint8_t i = 0; i < len; i++) {
+        tx_buf[tx_head] = data[i];
+        tx_head = (tx_head + 1) & TX_BUFFER_MASK;
+    }
+    UCSR0B |= (1 << UDRIE0);
+    return true;
 }
 
 // TODO (Activity 1): Implement the TX Data Register Empty ISR.
 // Vector: USART0_UDRE_vect
 // Drain one byte from tx_buf into UDR0; when the buffer is empty,
 // clear the UDRIE0 bit to stop the ISR from firing.
+ISR(USART0_UDRE_vect) {
+    UDR0 = tx_buf[tx_tail++];
+    tx_tail = (tx_tail + 1) & TX_BUFFER_MASK;
+    if (tx_tail == tx_head) 
+        UCSR0B &= ~(1 << UDRIE0);
+}
 
 /*
  * TODO (Activity 1): Implement rxDequeue().
@@ -92,8 +105,15 @@ bool txEnqueue(const uint8_t *data, uint8_t len) {
  * anything and return false.  Must NOT block.
  */
 bool rxDequeue(uint8_t *data, uint8_t len) {
-    // TODO
-    return false;
+    uint8_t free = (rx_tail - rx_head) & RX_BUFFER_MASK;
+    if (len > free) 
+        return false;
+    for (uint8_t i = 0; i < len; i++) {
+        data[i] = rx_buf[rx_tail];
+        rx_tail = (rx_tail + 1) & RX_BUFFER_MASK;
+    }
+    UCSR0B |= (1 << RXCIE0);
+    return true;
 }
 
 #endif
@@ -102,6 +122,15 @@ bool rxDequeue(uint8_t *data, uint8_t len) {
 // Vector: USART0_RX_vect
 // Read UDR0 immediately.  If the buffer is not full, store the byte
 // and advance the write index; otherwise discard it.
+ISR(USART0_RX_vect) {
+    uint8_t temp = UDR0;
+    uint8_t next = (rx_head + 1) & RX_BUFFER_MASK;
+    if (next != rx_tail) {
+        //if ==, buffer full, discard temp byte
+        rx_buf[rx_head] = temp;
+        rx_head = next;
+    }
+}
 
 // =============================================================
 // Framing: magic number + XOR checksum (pre-implemented)

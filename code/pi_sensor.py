@@ -58,13 +58,11 @@ PACKET_TYPE_RESPONSE = 1
 PACKET_TYPE_MESSAGE  = 2
 
 COMMAND_ESTOP  = 0
-# TODO (Activity 2): define your own command type for the color sensor here.
-# It must match the value you add to TCommandType in packets.h.
+COMMAND_COLOR = 1
 
 RESP_OK     = 0
 RESP_STATUS = 1
-# TODO (Activity 2): define your own response type for the color sensor here.
-# It must match the value you add to TResponseType in packets.h.
+RESP_COLOR = 2
 
 STATE_RUNNING = 0
 STATE_STOPPED = 1
@@ -107,8 +105,7 @@ def packFrame(packetType, command, data=b'', params=None):
     if params is None:
         params = [0] * PARAMS_COUNT
     data_padded = (data + b'\x00' * MAX_STR_LEN)[:MAX_STR_LEN]
-    packet_bytes = struct.pack(TPACKET_FMT, packetType, command,
-                               data_padded, *params)
+    packet_bytes = struct.pack(TPACKET_FMT, packetType, command, data_padded, *params)
     checksum = computeChecksum(packet_bytes)
     return MAGIC + packet_bytes + bytes([checksum])
 
@@ -224,6 +221,7 @@ def printPacket(pkt):
             # response.  Display the three channel frequencies in Hz, e.g.:
             #   R: <params[0]> Hz, G: <params[1]> Hz, B: <params[2]> Hz
             print(f"Response: unknown command {cmd}")
+            
         # Print the optional debug string from the data field.
         # On the Arduino side, fill pkt.data before calling sendFrame() to
         # send debug messages to this terminal (similar to Serial.print()).
@@ -244,54 +242,104 @@ def printPacket(pkt):
 
 def handleColorCommand():
     """
-    TODO (Activity 2): request a color reading from the Arduino and display it.
+    (Activity 2): request a color reading from the Arduino and display it.
 
     Check the E-Stop state first; if stopped, refuse with a clear message.
     Otherwise, send your color command to the Arduino.
     """
-    # TODO
-    pass
+    if isEstopActive():
+        print("E-Stop is active. Clear E-Stop to use the color sensor.")
+        return
+    sendCommand(COMMAND_COLOR)
 
 
 # ----------------------------------------------------------------
 # ACTIVITY 3: CAMERA
 # ----------------------------------------------------------------
 
-# TODO (Activity 3): import the camera library provided (alex_camera.py).
+import alex_camera                  # import the camera library provided (alex_camera.py).
 
-_camera = None          # TODO (Activity 3): open the camera (cameraOpen()) before first use.
-_frames_remaining = 5   # frames remaining before further captures are refused
+print("Initializing camera...")
+_camera = alex_camera.cameraOpen()  # open the camera before first use.
+_frames_remaining = 5               # frames remaining before further captures are refused
 
 
 def handleCameraCommand():
     """
-    TODO (Activity 3): capture and display a greyscale frame.
+    (Activity 3): capture and display a greyscale frame.
 
     Gate on E-Stop state and the remaining frame count.
     Use captureGreyscaleFrame() and renderGreyscaleFrame() from alex_camera.
     """
     global _frames_remaining
-    # TODO
-    pass
+    
+    if isEstopActive():
+        print("Refused: E-Stop is active")
+        return
+        
+    if _frames_remaining <= 0:
+        print("Refused: No camera frames remaining.")
+        return
+        
+    print(f"Capturing camera frame... ({_frames_remaining} frames remaining)")
+    
+    # Capture the frame
+    grey_frame = alex_camera.captureGreyscaleFrame(_camera)
+    
+    # Render it to the terminal
+    alex_camera.renderGreyscaleFrame(grey_frame)
+    
+    # Decrease counter and show remaining
+    _frames_remaining -= 1
+    print(f"Picture displayed! {_frames_remaining} frames remaining.")
 
 
 # ----------------------------------------------------------------
 # ACTIVITY 4: LIDAR
 # ----------------------------------------------------------------
 
-# TODO (Activity 4): import from lidar.alex_lidar and lidar_example_cli_plot
-#   (lidar_example_cli_plot.py is in the same folder; alex_lidar.py is in lidar/).
-
+# import from lidar.alex_lidar and lidar_example_cli_plot
+# (lidar_example_cli_plot.py is in the same folder; alex_lidar.py is in lidar/).
+    
+from lidar.alex_lidar import lidarConnect, lidarDisconnect, lidarStatus, performSingleScan
+import lidar_example_cli_plot
 
 def handleLidarCommand():
     """
-    TODO (Activity 4): perform a single LIDAR scan and render it.
+    (Activity 4): perform a single LIDAR scan and render it.
 
     Gate on E-Stop state, then use the LIDAR library to capture one scan
     and the CLI plot helpers to display it.
     """
-    # TODO
-    pass
+    if isEstopActive():
+        print("Refused: E-Stop is active")
+        return
+        
+    print("====== LiDAR Single Plot ======")
+    
+    # Connect to the LIDAR using the constants from the CLI plot script
+    lidar = lidarConnect(port=lidar_example_cli_plot.PORT, baudrate=lidar_example_cli_plot.BAUDRATE, wait=2)
+    
+    try:
+        # Retrieve the typical scan mode
+        status = lidarStatus(lidar, verbose=False)
+        
+        print("====== Scanning ======")
+        scan_data = performSingleScan(lidar, status['typical_scan_mode'])
+        
+        # Convert polar coordinates to Cartesian coordinates for plotting
+        xs, ys = lidar_example_cli_plot.convert_to_cartesian(scan_data[0], scan_data[1])
+        
+        # Convert continuous coordinates into a discrete grid representation
+        grid = lidar_example_cli_plot.points_to_grid(xs, ys)
+
+        # Render the grid into a string and print it to the CLI
+        print(lidar_example_cli_plot.render_to_cli(grid))
+        
+    finally:
+        # Always ensure the LIDAR safely disconnects to avoid leaving the motor running
+        lidarDisconnect(lidar)
+        print("\nSingle scan complete.")
 
 
 # ----------------------------------------------------------------
@@ -315,8 +363,12 @@ def handleUserInput(line):
     if line == 'e':
         print("Sending E-Stop command...")
         sendCommand(COMMAND_ESTOP, data=b'This is a debug message')
-    # TODO (Activity 2): add an elif branch for 'c' (color sensor) that calls handleColorCommand().
-    # TODO (Activities 3 & 4): add elif branches for 'p' (camera) and 'l' (LIDAR).
+    elif line == 'c':
+        handleColorCommand()
+    elif line == 'p':
+        handleCameraCommand()
+    elif line == 'l':
+        handleLidarCommand()
     else:
         print(f"Unknown input: '{line}'. Valid: e, c, p, l")
 
@@ -360,4 +412,6 @@ if __name__ == '__main__':
         print("\nExiting.")
     finally:
         # TODO (Activities 3 & 4): close the camera and disconnect the LIDAR here if you opened them.
+        alex_camera.cameraClose(_camera)
+        # lidarDisconnect(lidar) # not necessary, lidar already disconnects after each scan
         closeSerial()

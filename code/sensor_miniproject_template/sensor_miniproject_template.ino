@@ -21,6 +21,11 @@
 #include "packets.h"
 #include "serial_driver.h"
 
+volatile unsigned long lastInterruptTime = 0;
+const unsigned long DEBOUNCE_DELAY = 50; // 50 ms
+volatile uint32_t edgeCount = 0;
+volatile uint8_t timerDone = 0;
+
 // =============================================================
 // Packet helpers (pre-implemented for you)
 // =============================================================
@@ -65,6 +70,22 @@ volatile bool   stateChanged = false;
  * registers for your chosen pin.
  */
 
+// INT1 corresponds to PD1
+ISR(INT1_vect) {
+    unsigned long currentInterruptTime = millis();
+    if (currentInterruptTime - lastInterruptTime > DEBOUNCE_DELAY) {
+        bool isPressed = (PIND & (1 << 1));
+        if (buttonState == STATE_RUNNING && isPressed) {
+            buttonState = STATE_STOPPED;
+            stateChanged = true;
+        }
+        else if (buttonState == STATE_STOPPED && !isPressed) {
+            buttonState = STATE_RUNNING;
+            stateChanged = true;
+        }
+        lastInterruptTime = currentInterruptTime;
+    }
+}
 
 // =============================================================
 // Color sensor (TCS3200)
@@ -102,7 +123,60 @@ volatile bool   stateChanged = false;
  *       *b = measureChannel(0, 1) * 10;  // blue,  in Hz
  *   }
  */
+static void initTimer1() {
+    TCCR1A = 0;
+    TCCR1B |= (1 << WGM12);              // CTC mode
+    TCCR1B |= (1 << CS11) | (1 << CS10); // prescaler 64
+    OCR1A = 24999;
+    TIMSK1 |= (1 << OCIE1A);             // enable compare interrupt
+}
 
+static void initColorSensorPins() {
+    DDRA |= (1 << PA0) | (1 << PA1) | (1 << PA2) | (1 << PA3);
+
+    /* Frequency scaling: 20% */
+    PORTA |= (1 << PA0);   // S0 HIGH
+    PORTA &= ~(1 << PA1);  // S1 LOW
+}
+
+static void initEdgeInterrupt() {
+    EICRB |= (1 << ISC41) | (1 << ISC40);  // rising edge trigger
+    EIMSK |= (1 << INT4);                  // enable INT4
+}
+
+ISR(INT4_vect) {
+    edgeCount++;
+}
+
+ISR(TIMER1_COMPA_vect) {
+    timerDone = 1;
+}
+
+static uint32_t measureChannel(uint8_t s2, uint8_t s3) {
+    /* Set S2 */
+    if (s2)
+        PORTA |= (1 << PA2);
+    else
+        PORTA &= ~(1 << PA2);
+    /* Set S3 */
+    if (s3)
+        PORTA |= (1 << PA3);
+    else
+        PORTA &= ~(1 << PA3);
+    _delay_ms(5);  // allow sensor to stabilise
+    edgeCount = 0;
+    timerDone = 0;
+    TCNT1 = 0;     // reset timer
+    while (!timerDone);   // wait for 100 ms
+    return edgeCount;
+}
+
+static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
+    // Set S2/S3 for each channel, measure edge count, multiply by 10
+    *r = measureChannel(0, 0) * 10;  // red,   in Hz
+    *g = measureChannel(1, 1) * 10;  // green, in Hz
+    *b = measureChannel(0, 1) * 10;  // blue,  in Hz
+ }
 
 // =============================================================
 // Command handler
@@ -146,6 +220,23 @@ static void handleCommand(const TPacket *cmd) {
         // TODO (Activity 2): add COMMAND_COLOR case here.
         //   Call your color-reading function (which returns Hz), then send a
         //   response packet with the three channel frequencies in Hz.
+        case COMMAND_COLOR:
+            {
+                TPacket pkt;
+                //memset(&pkt, 0, sizeof(pkt));
+                pkt.packetType = PACKET_TYPE_MESSAGE;
+                pkt.command    = RESP_COLOR;
+                uint32_t r,g,b;
+                readColorChannels(&r, &g, &b);
+                pkt.params[0] = r;
+                pkt.params[1] = g;
+                pkt.params[2] = b;
+                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                sendFrame(&pkt);
+            }
+            sendStatus(STATE_RUNNING);
+        break;
     }
 }
 
@@ -164,6 +255,9 @@ void setup() {
 #endif
     // TODO (Activity 1): configure the button pin and its external interrupt,
     // then call sei() to enable global interrupts.
+    DDRD &= ~(1 << 1); //set PD1 as input
+    EICRA = 0b00000100; //trigger INT1 on any logical change
+    EIMSK = 0b00000010; //enable INT1
     sei();
 }
 
