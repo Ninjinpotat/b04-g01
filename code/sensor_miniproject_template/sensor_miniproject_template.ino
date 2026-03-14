@@ -22,7 +22,7 @@
 #include "serial_driver.h"
 
 volatile unsigned long lastInterruptTime = 0;
-const unsigned long DEBOUNCE_DELAY = 50; // 50 ms
+const unsigned long DEBOUNCE_DELAY = 30; // 30ms, more sensitive
 volatile uint32_t edgeCount = 0;
 volatile uint8_t timerDone = 0;
 
@@ -58,7 +58,7 @@ volatile TState buttonState = STATE_RUNNING;
 volatile bool   stateChanged = false;
 
 /*
- * TODO (Activity 1): Implement the E-Stop ISR.
+ * Implement the E-Stop ISR.
  *
  * Fire on any logical change on the button pin.
  * State machine (see handout diagram):
@@ -70,14 +70,19 @@ volatile bool   stateChanged = false;
  * registers for your chosen pin.
  */
 
-// INT1 corresponds to PD1
-ISR(INT1_vect) {
+ISR(INT1_vect) { // INT1 corresponds to PD1
     unsigned long currentInterruptTime = millis();
     if (currentInterruptTime - lastInterruptTime > DEBOUNCE_DELAY) {
-        bool isPressed = (PIND & (1 << 1));
-        if (isPressed) {
-            // Toggle the state on press
-            buttonState = (buttonState == STATE_RUNNING) ? STATE_STOPPED : STATE_RUNNING;
+        
+        // If the pin reads 0, it means it is connected to GND (Button is Pressed!)
+        bool isPressed = ((PIND & (1 << 1)) == 0); 
+        
+        if (buttonState == STATE_RUNNING && isPressed) {
+            buttonState = STATE_STOPPED;
+            stateChanged = true;
+        }
+        else if (buttonState == STATE_STOPPED && !isPressed) {
+            buttonState = STATE_RUNNING;
             stateChanged = true;
         }
         lastInterruptTime = currentInterruptTime;
@@ -89,7 +94,7 @@ ISR(INT1_vect) {
 // =============================================================
 
 /*
- * TODO (Activity 2): Implement the color sensor.
+ * (Activity 2): Implement the color sensor.
  *
  * Wire the TCS3200 to the Arduino Mega and configure the output pins
  * (S0, S1, S2, S3) and the frequency output pin.
@@ -185,7 +190,7 @@ static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
  * COMMAND_ESTOP is pre-implemented: it sets the Arduino to STATE_STOPPED
  * and sends back RESP_OK followed by a RESP_STATUS update.
  *
- * TODO (Activity 2): add a case for your color sensor command.
+ * (Activity 2): add a case for your color sensor command.
  *   Call your color-reading function, then send a response packet with
  *   the channel frequencies in Hz.
  */
@@ -214,7 +219,7 @@ static void handleCommand(const TPacket *cmd) {
             sendStatus(STATE_STOPPED);
             break;
 
-        // TODO (Activity 2): add COMMAND_COLOR case here.
+        // (Activity 2): add COMMAND_COLOR case here.
         //   Call your color-reading function (which returns Hz), then send a
         //   response packet with the three channel frequencies in Hz.
         case COMMAND_COLOR:
@@ -250,9 +255,10 @@ void setup() {
 #else
     Serial.begin(9600);
 #endif
-    // TODO (Activity 1): configure the button pin and its external interrupt,
+    // (Activity 1): configure the button pin and its external interrupt,
     // then call sei() to enable global interrupts.
     DDRD &= ~(1 << 1); //set PD1 as input
+    PORTD |= (1 << 1);  // <--- ADD THIS LINE: Enable internal pull-up resistor!
     EICRA = 0b00000100; //trigger INT1 on any logical change
     EIMSK = 0b00000010; //enable INT1
     initEdgeInterrupt();

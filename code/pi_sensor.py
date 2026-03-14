@@ -216,13 +216,13 @@ def printPacket(pkt):
                 print("Status: RUNNING")
             else:
                 print("Status: STOPPED")
+        # (Activity 2): add an elif branch here to handle your color
+        #   response.  Display the three channel frequencies in Hz, e.g.:
+        #   R: <params[0]> Hz, G: <params[1]> Hz, B: <params[2]> Hz
         elif cmd == RESP_COLOR:
             r, g, b = pkt['params'][:3]
             print(f"Color reading: R={r} Hz, G={g} Hz, B={b} Hz")
         else:
-            # TODO (Activity 2): add an elif branch here to handle your color
-            # response.  Display the three channel frequencies in Hz, e.g.:
-            #   R: <params[0]> Hz, G: <params[1]> Hz, B: <params[2]> Hz
             print(f"Response: unknown command {cmd}")
             
         # Print the optional debug string from the data field.
@@ -297,7 +297,7 @@ def handleCameraCommand():
     print(f"Picture displayed! {_frames_remaining} frames remaining.")
 
 
-# ----------------------------------------------------------------p
+# ----------------------------------------------------------------
 # ACTIVITY 4: LIDAR
 # ----------------------------------------------------------------
 
@@ -361,7 +361,7 @@ def handleUserInput(line):
     Dispatch a single line of user input.
 
     The 'e' case is pre-wired to send a software E-Stop command.
-    TODO (Activities 2, 3 & 4): add 'c' (color), 'p' (camera) and 'l' (LIDAR).
+    (Activities 2, 3 & 4): add 'c' (color), 'p' (camera) and 'l' (LIDAR).
     """
     if line == 'e':
         print("Sending E-Stop command...")
@@ -414,7 +414,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("\nExiting.")
     finally:
-        # TODO (Activities 3 & 4): close the camera and disconnect the LIDAR here if you opened them.
+        # (Activities 3 & 4): close the camera and disconnect the LIDAR here if you opened them.
         alex_camera.cameraClose(_camera)
         # lidarDisconnect(lidar) # not necessary, lidar already disconnects after each scan
         closeSerial()
