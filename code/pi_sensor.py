@@ -216,6 +216,9 @@ def printPacket(pkt):
                 print("Status: RUNNING")
             else:
                 print("Status: STOPPED")
+        elif cmd == RESP_COLOR:
+            r, g, b = pkt['params'][:3]
+            print(f"Color reading: R={r} Hz, G={g} Hz, B={b} Hz")
         else:
             # TODO (Activity 2): add an elif branch here to handle your color
             # response.  Display the three channel frequencies in Hz, e.g.:
@@ -294,7 +297,7 @@ def handleCameraCommand():
     print(f"Picture displayed! {_frames_remaining} frames remaining.")
 
 
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------p
 # ACTIVITY 4: LIDAR
 # ----------------------------------------------------------------
 

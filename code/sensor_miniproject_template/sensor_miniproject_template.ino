@@ -75,12 +75,9 @@ ISR(INT1_vect) {
     unsigned long currentInterruptTime = millis();
     if (currentInterruptTime - lastInterruptTime > DEBOUNCE_DELAY) {
         bool isPressed = (PIND & (1 << 1));
-        if (buttonState == STATE_RUNNING && isPressed) {
-            buttonState = STATE_STOPPED;
-            stateChanged = true;
-        }
-        else if (buttonState == STATE_STOPPED && !isPressed) {
-            buttonState = STATE_RUNNING;
+        if (isPressed) {
+            // Toggle the state on press
+            buttonState = (buttonState == STATE_RUNNING) ? STATE_STOPPED : STATE_RUNNING;
             stateChanged = true;
         }
         lastInterruptTime = currentInterruptTime;
@@ -128,7 +125,7 @@ static void initTimer1() {
     TCCR1B |= (1 << WGM12);              // CTC mode
     TCCR1B |= (1 << CS11) | (1 << CS10); // prescaler 64
     OCR1A = 24999;
-    TIMSK1 |= (1 << OCIE1A);             // enable compare interrupt
+    TIMSK1 = (1 << OCIE1A);             // enable compare interrupt
 }
 
 static void initColorSensorPins() {
@@ -222,9 +219,9 @@ static void handleCommand(const TPacket *cmd) {
         //   response packet with the three channel frequencies in Hz.
         case COMMAND_COLOR:
             {
-                TPacket pkt;
+                TPacket pkt = {0};
                 //memset(&pkt, 0, sizeof(pkt));
-                pkt.packetType = PACKET_TYPE_MESSAGE;
+                pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_COLOR;
                 uint32_t r,g,b;
                 readColorChannels(&r, &g, &b);
@@ -258,6 +255,9 @@ void setup() {
     DDRD &= ~(1 << 1); //set PD1 as input
     EICRA = 0b00000100; //trigger INT1 on any logical change
     EIMSK = 0b00000010; //enable INT1
+    initEdgeInterrupt();
+    initTimer1();
+    initColorSensorPins();
     sei();
 }
 

@@ -67,7 +67,7 @@ void usartInit(uint16_t ubrr) {
 // =============================================================
 
 /*
- * TODO (Activity 1): Implement txEnqueue().
+ * Implement txEnqueue().
  *
  * Attempt to copy all `len` bytes from `data` into the circular TX
  * buffer.  If the buffer does not have enough free space, do NOT
@@ -75,7 +75,8 @@ void usartInit(uint16_t ubrr) {
  * interrupt (UDRIE0) and return true.  Must NOT block.
  */
 bool txEnqueue(const uint8_t *data, uint8_t len) {
-    uint8_t free = (tx_tail - tx_head - 1) & TX_BUFFER_MASK;
+    uint8_t used = (tx_head - tx_tail) & TX_BUFFER_MASK;
+    uint8_t free = TX_BUFFER_SIZE - used - 1;
     if (len > free) 
         return false;
     for (uint8_t i = 0; i < len; i++) {
@@ -86,26 +87,26 @@ bool txEnqueue(const uint8_t *data, uint8_t len) {
     return true;
 }
 
-// TODO (Activity 1): Implement the TX Data Register Empty ISR.
+// Implement the TX Data Register Empty ISR.
 // Vector: USART0_UDRE_vect
 // Drain one byte from tx_buf into UDR0; when the buffer is empty,
 // clear the UDRIE0 bit to stop the ISR from firing.
 ISR(USART0_UDRE_vect) {
-    UDR0 = tx_buf[tx_tail++];
+    UDR0 = tx_buf[tx_tail];
     tx_tail = (tx_tail + 1) & TX_BUFFER_MASK;
     if (tx_tail == tx_head) 
         UCSR0B &= ~(1 << UDRIE0);
 }
 
 /*
- * TODO (Activity 1): Implement rxDequeue().
+ * Implement rxDequeue().
  *
  * Attempt to copy `len` bytes out of the circular RX buffer into
  * `data`.  If fewer than `len` bytes are available, do NOT copy
  * anything and return false.  Must NOT block.
  */
 bool rxDequeue(uint8_t *data, uint8_t len) {
-    uint8_t free = (rx_tail - rx_head) & RX_BUFFER_MASK;
+    uint8_t free = (rx_head - rx_tail) & RX_BUFFER_MASK;
     if (len > free) 
         return false;
     for (uint8_t i = 0; i < len; i++) {
@@ -118,7 +119,7 @@ bool rxDequeue(uint8_t *data, uint8_t len) {
 
 #endif
 
-// TODO (Activity 1): Implement the RX Complete ISR.
+// Implement the RX Complete ISR.
 // Vector: USART0_RX_vect
 // Read UDR0 immediately.  If the buffer is not full, store the byte
 // and advance the write index; otherwise discard it.

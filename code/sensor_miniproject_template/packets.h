@@ -28,7 +28,7 @@ typedef enum {
 typedef enum {
     RESP_OK     = 0,
     RESP_STATUS = 1,
-    RESP_COLOR = 2,
+    RESP_COLOR  = 2,
 } TResponseType;
 
 typedef enum {
