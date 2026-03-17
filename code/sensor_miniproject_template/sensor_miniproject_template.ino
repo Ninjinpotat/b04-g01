@@ -22,7 +22,8 @@
 #include "serial_driver.h"
 
 volatile unsigned long lastInterruptTime = 0;
-const unsigned long DEBOUNCE_DELAY = 30; // 30ms, more sensitive
+const unsigned long DEBOUNCE_DELAY = 30; // idk lol
+volatile uint8_t buttonPhase = 0; //try
 volatile uint32_t edgeCount = 0;
 volatile uint8_t timerDone = 0;
 
@@ -70,21 +71,40 @@ volatile bool   stateChanged = false;
  * registers for your chosen pin.
  */
 
-ISR(INT1_vect) { // INT1 corresponds to PD1
+ISR(INT1_vect) {
     unsigned long currentInterruptTime = millis();
     if (currentInterruptTime - lastInterruptTime > DEBOUNCE_DELAY) {
         
-        // If the pin reads 0, it means it is connected to GND (Button is Pressed!)
+        // Button reads 0 when pushed DOWN, 1 when released UP
         bool isPressed = ((PIND & (1 << 1)) == 0); 
         
-        if (buttonState == STATE_RUNNING && isPressed) {
-            buttonState = STATE_STOPPED;
-            stateChanged = true;
+        if (isPressed) { 
+            // The button was just PUSHED DOWN
+            if (buttonPhase == 0) {
+                // Phase 1: First Press -> STOP the system
+                buttonState = STATE_STOPPED;
+                stateChanged = true;
+                buttonPhase = 1;
+            } 
+            else if (buttonPhase == 2) {
+                // Phase 3: Second Press -> Do nothing to the system, just update phase
+                buttonPhase = 3;
+            }
+        } 
+        else { 
+            // The button was just RELEASED UP
+            if (buttonPhase == 1) {
+                // Phase 2: First Release -> Do nothing to the system, just update phase
+                buttonPhase = 2;
+            } 
+            else if (buttonPhase == 3) {
+                // Phase 0: Second Release -> START the system
+                buttonState = STATE_RUNNING;
+                stateChanged = true;
+                buttonPhase = 0;
+            }
         }
-        else if (buttonState == STATE_STOPPED && !isPressed) {
-            buttonState = STATE_RUNNING;
-            stateChanged = true;
-        }
+        
         lastInterruptTime = currentInterruptTime;
     }
 }
@@ -200,7 +220,11 @@ static void handleCommand(const TPacket *cmd) {
     switch (cmd->command) {
         case COMMAND_ESTOP:
             cli();
-            buttonState  = STATE_STOPPED;
+            if (buttonState == STATE_STOPPED) {
+                buttonState = STATE_RUNNING;
+            } else {
+                buttonState = STATE_STOPPED;
+            }
             stateChanged = false;
             sei();
             {
@@ -216,7 +240,7 @@ static void handleCommand(const TPacket *cmd) {
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
                 sendFrame(&pkt);
             }
-            sendStatus(STATE_STOPPED);
+            sendStatus(buttonState);
             break;
 
         // (Activity 2): add COMMAND_COLOR case here.

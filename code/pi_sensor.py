@@ -251,7 +251,7 @@ def handleColorCommand():
     Otherwise, send your color command to the Arduino.
     """
     if isEstopActive():
-        print("E-Stop is active. Clear E-Stop to use the color sensor.")
+        print("Refused: E-Stop is active")
         return
     sendCommand(COMMAND_COLOR)
 
