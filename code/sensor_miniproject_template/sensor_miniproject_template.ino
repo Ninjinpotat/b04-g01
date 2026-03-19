@@ -20,12 +20,14 @@
 
 #include "packets.h"
 #include "serial_driver.h"
+#include "robotlib.ino"
 
 volatile unsigned long lastInterruptTime = 0;
 const unsigned long DEBOUNCE_DELAY = 50; // experimental
 volatile uint8_t buttonPhase = 0; // for the button
 volatile uint32_t edgeCount = 0; // for the color sensor
 volatile uint8_t timerDone = 0;
+unsigned long speed = 15; // motor speed 
 
 // =============================================================
 // Packet helpers (pre-implemented for you)
@@ -263,7 +265,84 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
-        break;
+            break;
+        case COMMAND_W:
+            {   
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_MOVEMENT;
+                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                forward(speed);
+                sendFrame(&pkt);
+            }
+            sendStatus(STATE_RUNNING);
+            break;
+        case COMMAND_A:
+        {   
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_MOVEMENT;
+                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                ccw(speed);
+                sendFrame(&pkt);
+            }
+            sendStatus(STATE_RUNNING);
+            break;
+        case COMMAND_S:
+            {   
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_MOVEMENT;
+                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                backward(speed);
+                sendFrame(&pkt);
+            }
+            sendStatus(STATE_RUNNING);
+            break;
+        case COMMAND_D:
+            {   
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_MOVEMENT;
+                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                cw(speed);
+                sendFrame(&pkt);
+            }
+            sendStatus(STATE_RUNNING);
+            break;
+        case COMMAND_PLUS:
+            {   
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_MOVEMENT;
+                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                speed++;
+                sendFrame(&pkt);
+            }
+            sendStatus(STATE_RUNNING);
+            break;
+        case COMMAND_MINUS:
+            {   
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_MOVEMENT;
+                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                speed--;
+                sendFrame(&pkt);
+            }
+            sendStatus(STATE_RUNNING);
+            break;
+        case COMMAND_STOP:
+            {   
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_MOVEMENT;
+                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                stop();
+                sendFrame(&pkt);
+            }
+            sendStatus(STATE_RUNNING);
+            break;
     }
 }
 

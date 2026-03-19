@@ -23,12 +23,20 @@ typedef enum {
 typedef enum {
     COMMAND_ESTOP = 0,
     COMMAND_COLOR = 1,
+    COMMAND_W = 2,
+    COMMAND_A = 3,
+    COMMAND_S = 4,
+    COMMAND_D = 5,
+    COMMAND_PLUS = 6,
+    COMMAND_MINUS = 7,
+    COMMAND_STOP = 8,
 } TCommandType;
 
 typedef enum {
     RESP_OK     = 0,
     RESP_STATUS = 1,
     RESP_COLOR  = 2,
+    RESP_MOVEMENT = 3,
 } TResponseType;
 
 typedef enum {

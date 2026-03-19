@@ -59,10 +59,18 @@ PACKET_TYPE_MESSAGE  = 2
 
 COMMAND_ESTOP  = 0
 COMMAND_COLOR = 1
+COMMAND_W = 2
+COMMAND_A = 3
+COMMAND_S = 4
+COMMAND_D = 5
+COMMAND_PLUS = 6
+COMMAND_MINUS = 7
+COMMAND_STOP = 8
 
 RESP_OK     = 0
 RESP_STATUS = 1
 RESP_COLOR = 2
+RESP_MOVEMENT = 3
 
 STATE_RUNNING = 0
 STATE_STOPPED = 1
@@ -240,6 +248,27 @@ def printPacket(pkt):
 
 
 # ----------------------------------------------------------------
+# handling movement input
+# ----------------------------------------------------------------
+def handleMovementCommand(line):
+    if isEstopActive():
+        print("Refused: E-Stop is active")
+        return
+    elif line == 'w':
+        sendCommand(COMMAND_W)
+    elif line == 'a':
+        sendCommand(COMMAND_A)
+    elif line == 's':
+        sendCommand(COMMAND_S)
+    elif line == 'd':
+        sendCommand(COMMAND_D)
+    elif line == '+':
+        sendCommand(COMMAND_PLUS)
+    elif line == '-':
+        sendCommand(COMMAND_MINUS)
+    elif line == 'q':
+        sendCommand(COMMAND_STOP)
+# ----------------------------------------------------------------
 # ACTIVITY 2: COLOR SENSOR
 # ----------------------------------------------------------------
 
@@ -372,8 +401,20 @@ def handleUserInput(line):
         handleCameraCommand()
     elif line == 'l':
         handleLidarCommand()
+    elif line == 'w':
+        handleMovementCommand(line)
+    elif line == 'a':
+        handleMovementCommand(line)
+    elif line == 's':
+        handleMovementCommand(line)
+    elif line == 'd':
+        handleMovementCommand(line)
+    elif line == '+':
+        handleMovementCommand(line)
+    elif line == '-':
+        handleMovementCommand(line)
     else:
-        print(f"Unknown input: '{line}'. Valid: e, c, p, l")
+        print(f"Unknown input: '{line}'. Valid: e, c, p, l, w, a, s, d, +, -")
 
 
 def runCommandInterface():
