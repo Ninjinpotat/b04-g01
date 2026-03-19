@@ -217,6 +217,7 @@ def printPacket(pkt):
     if ptype == PACKET_TYPE_RESPONSE:
         if cmd == RESP_OK:
             print("Response: OK")
+
         elif cmd == RESP_STATUS:
             state = pkt['params'][0]
             _estop_state = state
@@ -224,21 +225,26 @@ def printPacket(pkt):
                 print("Status: RUNNING")
             else:
                 print("Status: STOPPED")
-        # (Activity 2): add an elif branch here to handle your color
-        #   response.  Display the three channel frequencies in Hz, e.g.:
-        #   R: <params[0]> Hz, G: <params[1]> Hz, B: <params[2]> Hz
+
         elif cmd == RESP_COLOR:
             r, g, b = pkt['params'][:3]
             print(f"Color reading: R={r} Hz, G={g} Hz, B={b} Hz")
+
+        elif cmd == RESP_MOVEMENT:
+            direction = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
+            speed = pkt['params'][0]
+            print(f"Movement: direction={direction}, speed={speed}")
+
         else:
             print(f"Response: unknown command {cmd}")
             
         # Print the optional debug string from the data field.
         # On the Arduino side, fill pkt.data before calling sendFrame() to
         # send debug messages to this terminal (similar to Serial.print()).
-        debug = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
-        if debug:
-            print(f"Arduino debug: {debug}")
+
+        # debug = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
+        # if debug:
+        #     print(f"Arduino debug: {debug}")
 
     elif ptype == PACKET_TYPE_MESSAGE:
         msg = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
@@ -268,6 +274,8 @@ def handleMovementCommand(line):
         sendCommand(COMMAND_MINUS)
     elif line == 'q':
         sendCommand(COMMAND_STOP)
+
+        
 # ----------------------------------------------------------------
 # ACTIVITY 2: COLOR SENSOR
 # ----------------------------------------------------------------
@@ -413,8 +421,10 @@ def handleUserInput(line):
         handleMovementCommand(line)
     elif line == '-':
         handleMovementCommand(line)
+    elif line == 'q':
+        sendCommand(COMMAND_STOP)
     else:
-        print(f"Unknown input: '{line}'. Valid: e, c, p, l, w, a, s, d, +, -")
+        print(f"Unknown input: '{line}'. Valid: e, c, p, l, w, a, s, d, +, -, q")
 
 
 def runCommandInterface():
@@ -424,7 +434,14 @@ def runCommandInterface():
     Uses select.select() to simultaneously receive packets from the Arduino
     and read typed user input from stdin without either blocking the other.
     """
-    print("Sensor interface ready. Type e / c / p / l and press Enter.")
+    print("Sensor interface ready. Controls:\n" \
+    "  e  E-stop\n" \
+    "  c  color reading\n" \
+    "  p  capture and display a camera frame\n" \
+    "  l  single LIDAR scan\n" \
+    "  w/a/s/d move forward/left/backward/right\n" \
+    "  +/- increase/decrease speed\n" \
+    "  q  stop movement\n")
     print("Press Ctrl+C to exit.\n")
 
     while True:

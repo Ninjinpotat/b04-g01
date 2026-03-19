@@ -20,14 +20,14 @@
 
 #include "packets.h"
 #include "serial_driver.h"
-#include "robotlib.ino"
+#include "robotlib.h"
 
 volatile unsigned long lastInterruptTime = 0;
 const unsigned long DEBOUNCE_DELAY = 50; // experimental
 volatile uint8_t buttonPhase = 0; // for the button
 volatile uint32_t edgeCount = 0; // for the color sensor
 volatile uint8_t timerDone = 0;
-unsigned long speed = 15; // motor speed 
+unsigned long speed = 150; // (default) motor speed 
 
 // =============================================================
 // Packet helpers (pre-implemented for you)
@@ -217,6 +217,8 @@ static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
  *   Call your color-reading function, then send a response packet with
  *   the channel frequencies in Hz.
  */
+dir lastMove = STOP;
+
 static void handleCommand(const TPacket *cmd) {
     if (cmd->packetType != PACKET_TYPE_COMMAND) return;
 
@@ -231,16 +233,12 @@ static void handleCommand(const TPacket *cmd) {
             stateChanged = false;
             sei();
             {
-                // The data field of a TPacket can carry a short debug string (up to
-                // 31 characters).  pi_sensor.py prints it automatically for any packet
-                // where data is non-empty, so you can use it to send debug messages
-                // from the Arduino to the Pi terminal -- similar to Serial.print().
                 TPacket pkt;
                 memset(&pkt, 0, sizeof(pkt));
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_OK;
-                strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                pkt.data[sizeof(pkt.data) - 1] = '\0';
+                // strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
+                // pkt.data[sizeof(pkt.data) - 1] = '\0';
                 sendFrame(&pkt);
             }
             sendStatus(buttonState);
@@ -268,72 +266,137 @@ static void handleCommand(const TPacket *cmd) {
             break;
         case COMMAND_W:
             {   
+                TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
-                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+
+                pkt.params[0] = speed;
+                strncpy(pkt.data, "Forwards", sizeof(pkt.data) - 1);
+                pkt.data[sizeof(pkt.data) - 1] = '\0';
+
                 forward(speed);
+                lastMove = GO;
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
             break;
         case COMMAND_A:
         {   
+                TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
-                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+
+                pkt.params[0] = speed;
+                strncpy(pkt.data, "Left turn", sizeof(pkt.data) - 1);
+                pkt.data[sizeof(pkt.data) - 1] = '\0';
+
                 ccw(speed);
+                lastMove = CCW;
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
             break;
         case COMMAND_S:
             {   
+                TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
-                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+
+                pkt.params[0]  = speed;
+                strncpy(pkt.data, "Backwards", sizeof(pkt.data) - 1);
+                pkt.data[sizeof(pkt.data) - 1] = '\0';
+
                 backward(speed);
+                lastMove = BACK;
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
             break;
         case COMMAND_D:
             {   
+                TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
-                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+
+                pkt.params[0] = speed;
+                strncpy(pkt.data, "Right turn", sizeof(pkt.data) - 1);
+                pkt.data[sizeof(pkt.data) - 1] = '\0';
+
                 cw(speed);
+                lastMove = CW;
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
             break;
         case COMMAND_PLUS:
             {   
+                TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
-                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                //pkt.data[sizeof(pkt.data) - 1] = '\0';
-                speed++;
+
+                speed += 10;
+                speed = constrain(speed, 0, 255);
+
+                pkt.params[0] = speed;
+                strncpy(pkt.data, "Increasing speed by 10", sizeof(pkt.data) - 1);
+                pkt.data[sizeof(pkt.data) - 1] = '\0';
+
+                switch (lastMove) { //execute last movement with updated speed
+                    case GO:
+                        forward(speed);
+                        break;
+                    case BACK:
+                        backward(speed);
+                        break;
+                    case CCW:
+                        ccw(speed);
+                        break;
+                    case CW:
+                        cw(speed);
+                        break;
+                    case STOP: //do nothing
+                        break;
+                }
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
             break;
         case COMMAND_MINUS:
             {   
+                TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
-                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                //pkt.data[sizeof(pkt.data) - 1] = '\0';
-                speed--;
+
+                speed -= 10;
+                speed = constrain(speed, 0, 255);
+                
+                pkt.params[0] = speed;
+                strncpy(pkt.data, "Decreasing speed by 10", sizeof(pkt.data) - 1);
+                pkt.data[sizeof(pkt.data) - 1] = '\0';
+
+                switch (lastMove) { //execute last movement with updated speed
+                    case GO:
+                        forward(speed);
+                        break;
+                    case BACK:
+                        backward(speed);
+                        break;
+                    case CCW:
+                        ccw(speed);
+                        break;
+                    case CW:
+                        cw(speed);
+                        break;
+                    case STOP: //do nothing
+                        break;
+                }
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
             break;
         case COMMAND_STOP:
             {   
+                TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
                 //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
