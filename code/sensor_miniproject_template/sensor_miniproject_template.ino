@@ -292,7 +292,7 @@ static void handleCommand(const TPacket *cmd) {
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
                 cw(speed);
-                lastMove = CCW;
+                lastMove = CW;
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -324,7 +324,7 @@ static void handleCommand(const TPacket *cmd) {
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
                 ccw(speed);
-                lastMove = CW;
+                lastMove = CCW;
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);

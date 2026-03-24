@@ -21,6 +21,7 @@ import serial
 import time
 import sys
 import select
+from second_terminal import relay
 
 # ----------------------------------------------------------------
 # SERIAL PORT SETUP
@@ -452,6 +453,7 @@ def runCommandInterface():
             pkt = receiveFrame()
             if pkt:
                 printPacket(pkt)
+                relay.onPacketReceived(packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params']))
 
         rlist, _, _ = select.select([sys.stdin], [], [], 0)
         if rlist:
@@ -461,6 +463,7 @@ def runCommandInterface():
                 continue
             handleUserInput(line)
 
+        relay.checkSecondTerminal(_ser)
         time.sleep(0.05)
 
 
@@ -470,6 +473,7 @@ def runCommandInterface():
 
 if __name__ == '__main__':
     openSerial()
+    relay.start()
     try:
         runCommandInterface()
     except KeyboardInterrupt:
@@ -478,4 +482,5 @@ if __name__ == '__main__':
         # (Activities 3 & 4): close the camera and disconnect the LIDAR here if you opened them.
         alex_camera.cameraClose(_camera)
         # lidarDisconnect(lidar) # not necessary, lidar already disconnects after each scan
+        relay.shutdown()
         closeSerial()
