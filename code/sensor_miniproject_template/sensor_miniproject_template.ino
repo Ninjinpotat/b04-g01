@@ -147,12 +147,12 @@ ISR(INT1_vect) {
  *       *b = measureChannel(0, 1) * 10;  // blue,  in Hz
  *   }
  */
-static void initTimer1() {
-    TCCR1A = 0;
-    TCCR1B |= (1 << WGM12);              // CTC mode
-    TCCR1B |= (1 << CS11) | (1 << CS10); // prescaler 64
-    OCR1A = 24999;
-    TIMSK1 = (1 << OCIE1A);             // enable compare interrupt
+static void initTimer5() {
+    TCCR5A = 0;
+    TCCR5B |= (1 << WGM52);              // CTC mode
+    TCCR5B |= (1 << CS51) | (1 << CS50); // prescaler 64
+    OCR5A = 24999;
+    TIMSK5 = (1 << OCIE5A);             // enable compare interrupt
 }
 
 static void initColorSensorPins() {
@@ -172,7 +172,7 @@ ISR(INT4_vect) {
     edgeCount++;
 }
 
-ISR(TIMER1_COMPA_vect) {
+ISR(TIMER5_COMPA_vect) {
     timerDone = 1;
 }
 
@@ -191,7 +191,7 @@ static uint32_t measureChannel(uint8_t s2, uint8_t s3) {
     //_delay_ms(5);  // allow sensor to stabilise
     edgeCount = 0;
     timerDone = 0;
-    TCNT1 = 0;     // reset timer
+    TCNT5 = 0;     // reset timer
     while (!timerDone);   // wait for 100 ms
     return edgeCount;
 }
@@ -242,6 +242,7 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
             }
             sendStatus(buttonState);
+            stop(); //must stop the motors during estop!
             break;
 
         // (Activity 2): add COMMAND_COLOR case here.
@@ -290,7 +291,7 @@ static void handleCommand(const TPacket *cmd) {
                 strncpy(pkt.data, "Left turn", sizeof(pkt.data) - 1);
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                ccw(speed);
+                cw(speed);
                 lastMove = CCW;
                 sendFrame(&pkt);
             }
@@ -322,7 +323,7 @@ static void handleCommand(const TPacket *cmd) {
                 strncpy(pkt.data, "Right turn", sizeof(pkt.data) - 1);
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                cw(speed);
+                ccw(speed);
                 lastMove = CW;
                 sendFrame(&pkt);
             }
@@ -429,7 +430,7 @@ void setup() {
     EICRA = 0b00000100; //trigger INT1 on any logical change
     EIMSK = 0b00000010; //enable INT1
     initEdgeInterrupt();
-    initTimer1();
+    initTimer5();
     initColorSensorPins();
     sei();
 }

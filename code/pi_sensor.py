@@ -249,6 +249,7 @@ def printPacket(pkt):
     elif ptype == PACKET_TYPE_MESSAGE:
         msg = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
         print(f"Arduino: {msg}")
+        
     else:
         print(f"Packet: type={ptype}, cmd={cmd}")
 
@@ -274,6 +275,8 @@ def handleMovementCommand(line):
         sendCommand(COMMAND_MINUS)
     elif line == 'q':
         sendCommand(COMMAND_STOP)
+    else:
+        return
 
         
 # ----------------------------------------------------------------
