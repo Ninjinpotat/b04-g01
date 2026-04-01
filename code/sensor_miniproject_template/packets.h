@@ -30,6 +30,12 @@ typedef enum {
     COMMAND_PLUS = 6,
     COMMAND_MINUS = 7,
     COMMAND_STOP = 8,
+    COMMAND_ARM_BASE     9
+    COMMAND_ARM_SHOULDER 10
+    COMMAND_ARM_ELBOW    11
+    COMMAND_ARM_GRIPPER  12
+    COMMAND_ARM_HOME     13
+    COMMAND_ARM_SPEED    14
 } TCommandType;
 
 typedef enum {
