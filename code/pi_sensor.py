@@ -54,6 +54,8 @@ def closeSerial():
 # (must match sensor_miniproject_template.ino)
 # ----------------------------------------------------------------
 
+# from packets.py import *
+
 PACKET_TYPE_COMMAND  = 0
 PACKET_TYPE_RESPONSE = 1
 PACKET_TYPE_MESSAGE  = 2
@@ -67,6 +69,12 @@ COMMAND_D = 5
 COMMAND_PLUS = 6
 COMMAND_MINUS = 7
 COMMAND_STOP = 8
+COMMAND_ARM_BASE     = 9
+COMMAND_ARM_SHOULDER = 10
+COMMAND_ARM_ELBOW    = 11
+COMMAND_ARM_GRIPPER  = 12
+COMMAND_ARM_HOME     = 13
+COMMAND_ARM_SPEED    = 14
 
 RESP_OK     = 0
 RESP_STATUS = 1
@@ -256,7 +264,7 @@ def printPacket(pkt):
 
 
 # ----------------------------------------------------------------
-# handling movement input
+# MOVEMENT INPUT
 # ----------------------------------------------------------------
 def handleMovementCommand(line):
     if isEstopActive():
@@ -281,7 +289,7 @@ def handleMovementCommand(line):
 
         
 # ----------------------------------------------------------------
-# ACTIVITY 2: COLOR SENSOR
+# COLOR SENSOR
 # ----------------------------------------------------------------
 
 def handleColorCommand():
@@ -298,7 +306,7 @@ def handleColorCommand():
 
 
 # ----------------------------------------------------------------
-# ACTIVITY 3: CAMERA
+# CAMERA
 # ----------------------------------------------------------------
 
 import alex_camera                  # import the camera library provided (alex_camera.py).
@@ -339,52 +347,77 @@ def handleCameraCommand():
 
 
 # ----------------------------------------------------------------
-# ACTIVITY 4: LIDAR
+# LIDAR (discontinued, replaced with SLAM)
 # ----------------------------------------------------------------
 
 # import from lidar.alex_lidar and lidar_example_cli_plot
 # (lidar_example_cli_plot.py is in the same folder; alex_lidar.py is in lidar/).
     
-from lidar.alex_lidar import lidarConnect, lidarDisconnect, lidarStatus, performSingleScan
-import lidar_example_cli_plot
+# from lidar.alex_lidar import lidarConnect, lidarDisconnect, lidarStatus, performSingleScan
+# import lidar_example_cli_plot
 
-def handleLidarCommand():
-    """
-    (Activity 4): perform a single LIDAR scan and render it.
+# def handleLidarCommand():
+#     """
+#     (Activity 4): perform a single LIDAR scan and render it.
 
-    Gate on E-Stop state, then use the LIDAR library to capture one scan
-    and the CLI plot helpers to display it.
-    """
+#     Gate on E-Stop state, then use the LIDAR library to capture one scan
+#     and the CLI plot helpers to display it.
+#     """
+#     if isEstopActive():
+#         print("Refused: E-Stop is active")
+#         return
+        
+#     print("====== LiDAR Single Plot ======")
+    
+#     # Connect to the LIDAR using the constants from the CLI plot script
+#     lidar = lidarConnect(port=lidar_example_cli_plot.PORT, baudrate=lidar_example_cli_plot.BAUDRATE, wait=2)
+    
+#     try:
+#         # Retrieve the typical scan mode
+#         status = lidarStatus(lidar, verbose=False)
+        
+#         print("====== Scanning ======")
+#         scan_data = performSingleScan(lidar, status['typical_scan_mode'])
+        
+#         # Convert polar coordinates to Cartesian coordinates for plotting
+#         xs, ys = lidar_example_cli_plot.convert_to_cartesian(scan_data[0], scan_data[1])
+        
+#         # Convert continuous coordinates into a discrete grid representation
+#         grid = lidar_example_cli_plot.points_to_grid(xs, ys)
+
+#         # Render the grid into a string and print it to the CLI
+#         print(lidar_example_cli_plot.render_to_cli(grid))
+        
+#     finally:
+#         # Always ensure the LIDAR safely disconnects to avoid leaving the motor running
+#         lidarDisconnect(lidar)
+#         print("\nSingle scan complete.")
+
+# ----------------------------------------------------------------
+# SERVO ARM
+# ----------------------------------------------------------------
+
+def handleArmCommand(joint, deg):
     if isEstopActive():
         print("Refused: E-Stop is active")
         return
-        
-    print("====== LiDAR Single Plot ======")
-    
-    # Connect to the LIDAR using the constants from the CLI plot script
-    lidar = lidarConnect(port=lidar_example_cli_plot.PORT, baudrate=lidar_example_cli_plot.BAUDRATE, wait=2)
-    
-    try:
-        # Retrieve the typical scan mode
-        status = lidarStatus(lidar, verbose=False)
-        
-        print("====== Scanning ======")
-        scan_data = performSingleScan(lidar, status['typical_scan_mode'])
-        
-        # Convert polar coordinates to Cartesian coordinates for plotting
-        xs, ys = lidar_example_cli_plot.convert_to_cartesian(scan_data[0], scan_data[1])
-        
-        # Convert continuous coordinates into a discrete grid representation
-        grid = lidar_example_cli_plot.points_to_grid(xs, ys)
-
-        # Render the grid into a string and print it to the CLI
-        print(lidar_example_cli_plot.render_to_cli(grid))
-        
-    finally:
-        # Always ensure the LIDAR safely disconnects to avoid leaving the motor running
-        lidarDisconnect(lidar)
-        print("\nSingle scan complete.")
-
+    if joint == 'home':
+        sendCommand(COMMAND_ARM_HOME)
+        print("Arm: homing")
+        return
+    cmd_map = {
+        'b': COMMAND_ARM_BASE,
+        's': COMMAND_ARM_SHOULDER,
+        'e': COMMAND_ARM_ELBOW,
+        'g': COMMAND_ARM_GRIPPER,
+    }
+    if joint not in cmd_map:
+        print(f"Unknown arm joint: {joint}")
+        return
+    deg = max(0, min(180, deg))
+    params = [deg] + [0] * (PARAMS_COUNT - 1)
+    sendCommand(cmd_map[joint], params=params)
+    print(f"Arm: moving {joint} to {deg}°")
 
 # ----------------------------------------------------------------
 # COMMAND-LINE INTERFACE
@@ -411,8 +444,8 @@ def handleUserInput(line):
         handleColorCommand()
     elif line == 'p':
         handleCameraCommand()
-    elif line == 'l':
-        handleLidarCommand()
+    # elif line == 'l':
+    #     handleLidarCommand()
     elif line == 'w':
         handleMovementCommand(line)
     elif line == 'a':
@@ -427,6 +460,14 @@ def handleUserInput(line):
         handleMovementCommand(line)
     elif line == 'q':
         sendCommand(COMMAND_STOP)
+    elif len(line) == 4 and line[0] in ('b', 's', 'e', 'g'):
+        try:
+            deg = int(line[1:])
+            handleArmCommand(line[0], deg)
+        except ValueError:
+            print("Arm command format: <joint><deg> e.g. b090, s045, e120, g180")
+    elif line == 'h':
+        handleArmCommand('home', 0)
     else:
         print(f"Unknown input: '{line}'. Valid: e, c, p, l, w, a, s, d, +, -, q")
 

@@ -29,8 +29,33 @@ volatile uint32_t edgeCount = 0; // for the color sensor
 volatile uint8_t timerDone = 0;
 unsigned long speed = 150; // (default) motor speed 
 
+//======================
+//SERVO ARM consts
+//======================
+
+#define STEP_TICKS 11 //calculated for 1 degree increase
+unsigned long lastStep = 0;
+int msPerDeg = 10;
+
+// Updated to the PORTK analog pins on the Mega
+const int BASE_PIN     = A8;  // PK0
+const int SHOULDER_PIN = A9;  // PK1
+const int ELBOW_PIN    = A10; // PK2
+const int GRIPPER_PIN  = A11; // PK3
+
+int stagecount = 0;
+
+double volatile curr_state[]   = {2300,3666,3688,1750};
+double volatile target_state[] = {2300,3666,3688,1750};
+
+// Define checkpoints for each servo (spacing them out in the 20ms period)
+#define B_CHECKPOINT 0
+#define S_CHECKPOINT 10000
+#define E_CHECKPOINT 20000
+#define G_CHECKPOINT 30000
+
 // =============================================================
-// Packet helpers (pre-implemented for you)
+// Packet helpers
 // =============================================================
 
 /*
@@ -59,19 +84,6 @@ static void sendStatus(TState state) {
 
 volatile TState buttonState = STATE_RUNNING;
 volatile bool   stateChanged = false;
-
-/*
- * Implement the E-Stop ISR.
- *
- * Fire on any logical change on the button pin.
- * State machine (see handout diagram):
- *   RUNNING + press (pin HIGH)  ->  STOPPED, set stateChanged = true
- *   STOPPED + release (pin LOW) ->  RUNNING, set stateChanged = true
- *
- * Debounce the button.  You will also need to enable this interrupt
- * in setup() -- check the ATMega2560 datasheet for the correct
- * registers for your chosen pin.
- */
 
 ISR(INT1_vect) {
     unsigned long currentInterruptTime = millis();
@@ -112,47 +124,26 @@ ISR(INT1_vect) {
 }
 
 // =============================================================
-// Color sensor (TCS3200)
+// Color sensor (TCS3200) - BARE METAL ON TIMER 2
 // =============================================================
 
-/*
- * (Activity 2): Implement the color sensor.
- *
- * Wire the TCS3200 to the Arduino Mega and configure the output pins
- * (S0, S1, S2, S3) and the frequency output pin.
- *
- * Use 20% output frequency scaling (S0=HIGH, S1=LOW).  This is the
- * required standardised setting; it gives a convenient measurement range and
- * ensures all implementations report the same physical quantity.
- *
- * Use a timer to count rising edges on the sensor output over a fixed
- * window (e.g. 100 ms) for each color channel (red, green, blue).
- * Convert the edge count to hertz before sending:
- *   frequency_Hz = edge_count / measurement_window_s
- * For a 100 ms window: frequency_Hz = edge_count * 10.
- *
- * Implement a function that measures all three channels and stores the
- * frequency in Hz in three variables.
- *
- * Define your own command and response types in packets.h (and matching
- * constants in pi_sensor.py), then handle the command in handleCommand()
- * and send back the channel frequencies (in Hz) in a response packet.
- *
- * Example skeleton:
- *
- *   static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
- *       // Set S2/S3 for each channel, measure edge count, multiply by 10
- *       *r = measureChannel(0, 0) * 10;  // red,   in Hz
- *       *g = measureChannel(1, 1) * 10;  // green, in Hz
- *       *b = measureChannel(0, 1) * 10;  // blue,  in Hz
- *   }
- */
-static void initTimer5() {
-    TCCR5A = 0;
-    TCCR5B |= (1 << WGM52);              // CTC mode
-    TCCR5B |= (1 << CS51) | (1 << CS50); // prescaler 64
-    OCR5A = 24999;
-    TIMSK5 = (1 << OCIE5A);             // enable compare interrupt
+volatile uint32_t edgeCount = 0;
+volatile uint8_t timerDone = 0;
+
+// Variables to handle the 8-bit timer tracking 100ms
+volatile uint8_t color_window_active = 0;
+volatile uint8_t color_ms_count = 0;
+
+static void initTimer2_ColorSensor() {
+    // Configure Timer 2 (8-bit) for CTC mode to fire every 1ms
+    TCCR2A = (1 << WGM21); // CTC mode
+    TCCR2B = (1 << CS22);  // Prescaler 64
+    
+    // 16MHz / 64 = 250,000 ticks per second. 
+    // 250 ticks = 1 millisecond. (250 - 1 = 249)
+    OCR2A = 249;           
+    
+    TIMSK2 = (1 << OCIE2A); // Enable compare match interrupt
 }
 
 static void initColorSensorPins() {
@@ -165,34 +156,44 @@ static void initColorSensorPins() {
 
 static void initEdgeInterrupt() {
     EICRB |= (1 << ISC41) | (1 << ISC40);  // rising edge trigger
-    EIMSK |= (1 << INT4);                  // enable INT4
+    EIMSK |= (1 << INT4);                  // enable INT4 (Pin 19)
 }
 
+// Counts the frequency pulses from the sensor
 ISR(INT4_vect) {
     edgeCount++;
 }
 
-ISR(TIMER5_COMPA_vect) {
-    timerDone = 1;
+// Timer 2 Interrupt - Fires exactly once every 1 millisecond
+ISR(TIMER2_COMPA_vect) {
+    if (color_window_active) {
+        color_ms_count++;
+        if (color_ms_count >= 100) {  // 100ms window reached!
+            timerDone = 1;
+            color_window_active = 0;  // Stop counting
+        }
+    }
 }
 
 static uint32_t measureChannel(uint8_t s2, uint8_t s3) {
-    //TODO: implement delay without using delay fn
     /* Set S2 */
-    if (s2)
-        PORTA |= (1 << PA2);
-    else
-        PORTA &= ~(1 << PA2);
+    if (s2) PORTA |= (1 << PA2);
+    else    PORTA &= ~(1 << PA2);
     /* Set S3 */
-    if (s3)
-        PORTA |= (1 << PA3);
-    else
-        PORTA &= ~(1 << PA3);
-    //_delay_ms(5);  // allow sensor to stabilise
+    if (s3) PORTA |= (1 << PA3);
+    else    PORTA &= ~(1 << PA3);
+
+    // Reset counters
     edgeCount = 0;
     timerDone = 0;
-    TCNT5 = 0;     // reset timer
-    while (!timerDone);   // wait for 100 ms
+    color_ms_count = 0;
+    
+    // Start the 100ms hardware timer window
+    color_window_active = 1; 
+    
+    // Bare-metal wait. The Timer 2 ISR will break this loop after 100ms.
+    while (!timerDone); 
+    
     return edgeCount;
 }
 
@@ -201,7 +202,130 @@ static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
     *r = measureChannel(0, 0) * 10;  // red,   in Hz
     *g = measureChannel(1, 1) * 10;  // green, in Hz
     *b = measureChannel(0, 1) * 10;  // blue,  in Hz
- }
+}
+
+# ----------------------------------------------------------------
+# SERVO ARM
+# ----------------------------------------------------------------
+
+int parse3(const String *s) {
+  if (!s) return -1;
+  if (s->length() != 3) return -1;
+  if (!isDigit(s->charAt(0)) || !isDigit(s->charAt(1)) || !isDigit(s->charAt(2))) return -1;
+  return (s->charAt(0) - '0') * 100 + (s->charAt(1) - '0') * 10 + (s->charAt(2) - '0');
+}
+
+// Ensure you have the sys_ms variable defined at the top of your file
+// from our bare-metal Timer 2 clock!
+extern volatile unsigned long sys_ms; 
+
+void updateSmoothMotion() {
+  unsigned long now = sys_ms; // BARE-METAL: Replaced millis() with our custom sys_ms
+  if (now - lastStep < msPerDeg) return;
+  lastStep = now;
+ 
+  // Disable interrupts temporarily for safe array updating
+  cli(); 
+  for (int k = 0; k < 4; k++) {
+    if (curr_state[k] < target_state[k]) {
+      curr_state[k] += STEP_TICKS;
+      if (curr_state[k] > target_state[k])
+        curr_state[k] = target_state[k];
+    }
+    else if (curr_state[k] > target_state[k]) {
+      curr_state[k] -= STEP_TICKS;
+      if (curr_state[k] < target_state[k])
+        curr_state[k] = target_state[k];
+    }
+  }
+  sei(); 
+}
+
+// CHANGED TO TIMER 5 and PORT K
+ISR(TIMER5_COMPB_vect) {
+  switch (stagecount) {
+    case 0:
+      // Turn ON base servo (PORTK bit 0 is A8)
+      PORTK |= (1 << 0);
+      OCR5B += curr_state[0];
+      break;
+     
+    case 1:
+      // Turn OFF base servo
+      PORTK &= ~(1 << 0);
+      OCR5B = S_CHECKPOINT;
+      break;
+     
+    case 2:
+      // Turn ON shoulder servo (PORTK bit 1 is A9)
+      PORTK |= (1 << 1);
+      OCR5B += curr_state[1];
+      break;
+     
+    case 3:
+      // Turn OFF shoulder servo
+      PORTK &= ~(1 << 1);
+      OCR5B = E_CHECKPOINT;
+      break;
+     
+    case 4:
+      // Turn ON elbow servo (PORTK bit 2 is A10)
+      PORTK |= (1 << 2);
+      OCR5B += curr_state[2];
+      break;
+     
+    case 5:
+      // Turn OFF elbow servo
+      PORTK &= ~(1 << 2);
+      OCR5B = G_CHECKPOINT;
+      break;
+     
+    case 6:
+      // Turn ON gripper servo (PORTK bit 3 is A11)
+      PORTK |= (1 << 3);
+      OCR5B += curr_state[3];
+      break;
+     
+    case 7:
+      // Turn OFF gripper servo
+      PORTK &= ~(1 << 3);
+      OCR5B = B_CHECKPOINT;
+      stagecount = -1; // Will become 0 after increment
+      break;
+  }
+  stagecount++;
+}
+
+// CHANGED TO TIMER 5
+ISR(TIMER5_COMPA_vect) {
+  updateSmoothMotion();
+}
+
+// Call this from your main setup() function
+void initArmTimer5() {
+  // Set PK0, PK1, PK2, PK3 as outputs
+  DDRK |= 0b00001111;
+ 
+  // Clear all servo pins to LOW
+  PORTK &= ~0b00001111;
+ 
+  cli(); // Disable interrupts during setup
+ 
+  // Use CTC mode instead of Fast PWM, mapped to Timer 5
+  TCCR5A = 0b00000000;  // No PWM output pins
+  TCCR5B = 0b00001010;  // WGM52=1 (CTC), CS51=1 (prescaler=8)
+ 
+  // OCR5A is now TOP (defines the 20ms period)
+  OCR5A = 39999;  // 20ms period at 16MHz/8 = 2MHz (0.5us per tick)
+  OCR5B = 0;      // Start at beginning
+ 
+  TCNT5 = 0;
+ 
+  // Enable Compare Match A and B interrupts for Timer 5
+  TIMSK5 = 0b00000110;
+ 
+  sei(); // Enable interrupts
+}
 
 // =============================================================
 // Command handler
@@ -407,6 +531,68 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        case COMMAND_ARM_HOME:
+            {
+                target_state[0] = 2800;
+                target_state[1] = 2600;
+                target_state[2] = 3688;
+                target_state[3] = 1750;
+                TPacket pkt = {0};
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_OK;
+                sendFrame(&pkt);
+                break;
+            }
+        case COMMAND_ARM_BASE:
+            {
+                int deg = constrain(pkt.params[0], 0, 180);
+                target_state[0] = 1600 + (deg / 180.0) * 3000;
+                TPacket pkt = {0};
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_OK;
+                sendFrame(&pkt);
+                break;
+            }
+        case COMMAND_ARM_SHOULDER:
+            {
+                int deg = constrain(pkt.params[0], 0, 180);
+                target_state[1] = 2222 + (deg / 180.0) * 2888;
+                TPacket pkt = {0};
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_OK;
+                sendFrame(&pkt);
+                break;
+            }
+        case COMMAND_ARM_ELBOW:
+            {
+                int deg = constrain(pkt.params[0], 0, 180);
+                target_state[2] = 2300 + (deg / 180.0) * 2777;
+                TPacket pkt = {0};
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_OK;
+                sendFrame(&pkt);
+                break;
+            }
+        case COMMAND_ARM_GRIPPER:
+            {
+                int deg = constrain(pkt.params[0], 0, 180);
+                target_state[3] = 1450 + (deg / 180.0) * 600;
+                TPacket pkt = {0};
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_OK;
+                sendFrame(&pkt);
+                break;
+            }
+        case COMMAND_ARM_SPEED:
+            {
+                msPerDeg = constrain(pkt.params[0], 1, 50);
+                TPacket pkt = {0};
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_OK;
+                sendFrame(&pkt);
+                break;
+            }
+
     }
 }
 
@@ -430,8 +616,9 @@ void setup() {
     EICRA = 0b00000100; //trigger INT1 on any logical change
     EIMSK = 0b00000010; //enable INT1
     initEdgeInterrupt();
-    initTimer5();
     initColorSensorPins();
+    initTimer2_ColorSensor();
+    initTimer5();
     sei();
 }
 

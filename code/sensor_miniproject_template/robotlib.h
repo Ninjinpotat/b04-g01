@@ -10,11 +10,11 @@ typedef enum dir
   CW
 } dir;
 
-// Motor control
-#define FRONT_LEFT   2 // M4 on the driver shield
-#define FRONT_RIGHT  1 // M1 on the driver shield
-#define BACK_LEFT    3 // M3 on the driver shield
-#define BACK_RIGHT   4 // M2 on the driver shield
+// Motor control - post repositioning of mega
+#define FRONT_LEFT   1 // M4 on the driver shield
+#define FRONT_RIGHT  4 // M1 on the driver shield
+#define BACK_LEFT    2 // M3 on the driver shield
+#define BACK_RIGHT   3 // M2 on the driver shield
 
 AF_DCMotor motorFL(FRONT_LEFT);
 AF_DCMotor motorFR(FRONT_RIGHT);

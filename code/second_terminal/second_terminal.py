@@ -66,6 +66,8 @@ PI_PORT = 65432
 # ---------------------------------------------------------------------------
 # IMPORTANT: keep these in sync with your pi_sensor.py and the Arduino sketch.
 
+# from packets.py import all
+
 PACKET_TYPE_COMMAND  = 0
 PACKET_TYPE_RESPONSE = 1
 PACKET_TYPE_MESSAGE  = 2
@@ -79,6 +81,12 @@ COMMAND_D = 5
 COMMAND_PLUS = 6
 COMMAND_MINUS = 7
 COMMAND_STOP = 8
+COMMAND_ARM_BASE     = 9
+COMMAND_ARM_SHOULDER = 10
+COMMAND_ARM_ELBOW    = 11
+COMMAND_ARM_GRIPPER  = 12
+COMMAND_ARM_HOME     = 13
+COMMAND_ARM_SPEED    = 14
 
 RESP_OK     = 0
 RESP_STATUS = 1
