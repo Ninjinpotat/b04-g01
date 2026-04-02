@@ -45,6 +45,7 @@ import select
 import struct
 import sys
 import time
+import ssl
 
 # net_utils is imported with an absolute import because this script is designed
 # to be run directly (python3 second_terminal/second_terminal.py), which adds
@@ -207,7 +208,11 @@ def _handleInput(line: str, client: TCPClient):
 # ---------------------------------------------------------------------------
 
 def run():
-    client = TCPClient(host=PI_HOST, port=PI_PORT)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.load_verify_locations('../certs/server.crt')
+    ctx.check_hostname = False # change to True if using second machine
+  
+    client = TCPClient(host=PI_HOST, port=PI_PORT, ssl_context=ctx)
     print(f"[second_terminal] Connecting to pi_sensor.py at {PI_HOST}:{PI_PORT}...")
 
     if not client.connect(timeout=10.0):
