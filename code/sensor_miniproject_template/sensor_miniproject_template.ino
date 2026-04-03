@@ -29,9 +29,9 @@ volatile uint32_t edgeCount = 0; // for the color sensor
 volatile uint8_t timerDone = 0;
 unsigned long speed = 150; // (default) motor speed 
 
-//======================
-//SERVO ARM consts
-//======================
+// =============================================================
+// SERVO ARM consts
+// =============================================================
 
 #define STEP_TICKS 11 //calculated for 1 degree increase
 unsigned long lastStep = 0;
@@ -53,6 +53,8 @@ double volatile target_state[] = {2300,3666,3688,1750};
 #define S_CHECKPOINT 10000
 #define E_CHECKPOINT 20000
 #define G_CHECKPOINT 30000
+
+extern volatile unsigned long sys_ms; 
 
 // =============================================================
 // Packet helpers
@@ -204,11 +206,11 @@ static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
     *b = measureChannel(0, 1) * 10;  // blue,  in Hz
 }
 
-# ----------------------------------------------------------------
-# SERVO ARM
-# ----------------------------------------------------------------
+// =============================================================
+// SERVO ARM
+// =============================================================
 
-int parse3(const String *s) {
+int parse3 (const String *s) {
   if (!s) return -1;
   if (s->length() != 3) return -1;
   if (!isDigit(s->charAt(0)) || !isDigit(s->charAt(1)) || !isDigit(s->charAt(2))) return -1;
@@ -217,7 +219,6 @@ int parse3(const String *s) {
 
 // Ensure you have the sys_ms variable defined at the top of your file
 // from our bare-metal Timer 2 clock!
-extern volatile unsigned long sys_ms; 
 
 void updateSmoothMotion() {
   unsigned long now = sys_ms; // BARE-METAL: Replaced millis() with our custom sys_ms
@@ -331,16 +332,6 @@ void initArmTimer5() {
 // Command handler
 // =============================================================
 
-/*
- * Dispatch incoming commands from the Pi.
- *
- * COMMAND_ESTOP is pre-implemented: it sets the Arduino to STATE_STOPPED
- * and sends back RESP_OK followed by a RESP_STATUS update.
- *
- * (Activity 2): add a case for your color sensor command.
- *   Call your color-reading function, then send a response packet with
- *   the channel frequencies in Hz.
- */
 dir lastMove = STOP;
 
 static void handleCommand(const TPacket *cmd) {
@@ -369,9 +360,6 @@ static void handleCommand(const TPacket *cmd) {
             stop(); //must stop the motors during estop!
             break;
 
-        // (Activity 2): add COMMAND_COLOR case here.
-        //   Call your color-reading function (which returns Hz), then send a
-        //   response packet with the three channel frequencies in Hz.
         case COMMAND_COLOR:
             {
                 TPacket pkt = {0};
@@ -389,6 +377,7 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        
         case COMMAND_W:
             {   
                 TPacket pkt = {0};
@@ -405,6 +394,7 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        
         case COMMAND_A:
         {   
                 TPacket pkt = {0};
@@ -421,6 +411,7 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        
         case COMMAND_S:
             {   
                 TPacket pkt = {0};
@@ -437,6 +428,7 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        
         case COMMAND_D:
             {   
                 TPacket pkt = {0};
@@ -453,6 +445,7 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        
         case COMMAND_PLUS:
             {   
                 TPacket pkt = {0};
@@ -486,6 +479,7 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        
         case COMMAND_MINUS:
             {   
                 TPacket pkt = {0};
@@ -519,6 +513,7 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        
         case COMMAND_STOP:
             {   
                 TPacket pkt = {0};
@@ -531,6 +526,7 @@ static void handleCommand(const TPacket *cmd) {
             }
             sendStatus(STATE_RUNNING);
             break;
+        
         case COMMAND_ARM_HOME:
             {
                 target_state[0] = 2800;
@@ -543,6 +539,7 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
                 break;
             }
+        
         case COMMAND_ARM_BASE:
             {
                 int deg = constrain(pkt.params[0], 0, 180);
@@ -553,6 +550,7 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
                 break;
             }
+        
         case COMMAND_ARM_SHOULDER:
             {
                 int deg = constrain(pkt.params[0], 0, 180);
@@ -563,6 +561,7 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
                 break;
             }
+        
         case COMMAND_ARM_ELBOW:
             {
                 int deg = constrain(pkt.params[0], 0, 180);
@@ -573,6 +572,7 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
                 break;
             }
+        
         case COMMAND_ARM_GRIPPER:
             {
                 int deg = constrain(pkt.params[0], 0, 180);
@@ -583,6 +583,7 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
                 break;
             }
+        
         case COMMAND_ARM_SPEED:
             {
                 msPerDeg = constrain(pkt.params[0], 1, 50);
@@ -592,7 +593,6 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
                 break;
             }
-
     }
 }
 
@@ -602,24 +602,21 @@ static void handleCommand(const TPacket *cmd) {
 
 void setup() {
     // Initialise the serial link at 9600 baud.
-    // Serial.begin() is used by default; usartInit() takes over once
-    // USE_BAREMETAL_SERIAL is set to 1 in serial_driver.h.
-#if USE_BAREMETAL_SERIAL
-    usartInit(103);   // 9600 baud at 16 MHz
-#else
-    Serial.begin(9600);
-#endif
-    // (Activity 1): configure the button pin and its external interrupt,
-    // then call sei() to enable global interrupts.
-    DDRD &= ~(1 << 1); //set PD1 as input
-    PORTD |= (1 << 1);  // <--- ADD THIS LINE: Enable internal pull-up resistor!
+    usartInit(103); 
+
+    // E-stop button setup
+    DDRD &= ~(1 << 1);  //set PD1 as input
+    PORTD |= (1 << 1);  //Enable internal pull-up resistor!
     EICRA = 0b00000100; //trigger INT1 on any logical change
     EIMSK = 0b00000010; //enable INT1
+    
+    //Other setups
     initEdgeInterrupt();
     initColorSensorPins();
     initTimer2_ColorSensor();
     initTimer5();
-    sei();
+    
+    sei(); //re-enable interrupts
 }
 
 void loop() {
