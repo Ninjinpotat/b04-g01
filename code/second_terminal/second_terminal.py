@@ -208,7 +208,7 @@ def _handleInput(line: str, client: TCPClient):
         try:
             deg = int(line[1:])
         except ValueError:
-            print("Arm command format: <joint><deg> eg. b090")
+            print("[second_terminal] Error: Arm command format: <joint><deg> eg. b090")
             return
         
         # Map the letter to the correct command constant
@@ -253,7 +253,7 @@ def run():
         sys.exit(1)
 
     print("[second_terminal] Connected!")
-    print("[second_terminal] Commands:  e = E-Stop   q = quit")
+    print("[second_terminal] Commands: e (E-stop), h (Home), b/s/e/g/v + angle, q (quit)")
     print("[second_terminal] Incoming robot packets will be printed below.\n")
 
     try:

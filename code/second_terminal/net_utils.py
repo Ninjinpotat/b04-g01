@@ -47,9 +47,32 @@ def _sendFramed(sock, data: bytes) -> bool:
         True on success; False if a network error occurred (the error is
         printed so the user can see what went wrong).
     """
+    # try:
+    #     header = struct.pack(_LEN_FMT, len(data))
+    #     sock.sendall(header + data)
+    #     return True
+    # except (OSError, BrokenPipeError) as err:
+    #     print(f"[net_utils] send error: {err}")
+    #     return False
+    
+    import ssl
     try:
         header = struct.pack(_LEN_FMT, len(data))
-        sock.sendall(header + data)
+        payload = header + data
+        total_sent = 0
+        
+        # Manually loop the send process so it survives SSL timeouts
+        while total_sent < len(payload):
+            try:
+                sent = sock.send(payload[total_sent:])
+                if sent == 0:
+                    return False
+                total_sent += sent
+            except socket.timeout:
+                continue
+            except (ssl.SSLWantWriteError, ssl.SSLWantReadError):
+                continue
+                
         return True
     except (OSError, BrokenPipeError) as err:
         print(f"[net_utils] send error: {err}")
@@ -80,13 +103,32 @@ def _recvExact(sock, n: int):
     Returns:
         The bytes read, or None on error or connection close.
     """
+    # buf = b''
+    # while len(buf) < n:
+    #     try:
+    #         chunk = sock.recv(n - len(buf))
+    #     except (OSError, ConnectionResetError) as err:
+    #         print(f"[net_utils] recv error: {err}")
+    #         return None
+    #     if not chunk:
+    #         # Remote end closed the connection cleanly.
+    #         return None
+    #     buf += chunk
+    # return buf
+
+    import ssl # Ensure ssl is imported for error catching
     buf = b''
     while len(buf) < n:
         try:
             chunk = sock.recv(n - len(buf))
+        except socket.timeout:
+            continue  # Harmless timeout, just keep waiting
+        except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+            continue  # TLS layer needs a split second to decrypt, keep waiting
         except (OSError, ConnectionResetError) as err:
             print(f"[net_utils] recv error: {err}")
             return None
+            
         if not chunk:
             # Remote end closed the connection cleanly.
             return None
