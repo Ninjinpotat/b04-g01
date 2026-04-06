@@ -199,8 +199,39 @@ def _handleInput(line: str, client: TCPClient):
         print("[second_terminal] Quitting.")
         raise KeyboardInterrupt
 
+    elif line == 'h':
+        frame = _packFrame(PACKET_TYPE_COMMAND, COMMAND_ARM_HOME)
+        sendTPacketFrame(client.sock, frame)
+        print("[second_terminal] Sent: HOME")
+
+    elif len(line) == 4 and line[0] in ('b', 's', 'e', 'g', 'v'):
+        try:
+            deg = int(line[1:])
+        except ValueError:
+            print("Arm command format: <joint><deg> eg. b090")
+            return
+        
+        # Map the letter to the correct command constant
+        cmd_map = {
+            'b': COMMAND_ARM_BASE,
+            's': COMMAND_ARM_SHOULDER,
+            'e': COMMAND_ARM_ELBOW,
+            'g': COMMAND_ARM_GRIPPER,
+            'v': COMMAND_ARM_SPEED
+        }
+        
+        # Package the angle into params[0]
+        deg = max(0, min(180, deg)) # Constrain angle between 0 and 180
+        params = [deg] + [0] * (PARAMS_COUNT - 1)
+        
+        # Frame it and send it over the TCP socket to the Pi!
+        frame = _packFrame(PACKET_TYPE_COMMAND, cmd_map[line[0]], params=params)
+        sendTPacketFrame(client.sock, frame)
+        print(f"[second_terminal] Sent: {line[0]} to {deg}")
+        
     else:
-        print(f"[second_terminal] Unknown: '{line}'.  Valid: e (E-Stop)  q (quit)")
+        print(f"[second_terminal] Unknown: '{line}'. \
+              Valid: e (E-stop), h (Home), b/s/e/g/v + angle, q (quit)")
 
 
 # ---------------------------------------------------------------------------

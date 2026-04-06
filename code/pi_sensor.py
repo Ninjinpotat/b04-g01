@@ -313,7 +313,7 @@ import alex_camera                  # import the camera library provided (alex_c
 
 print("Initializing camera...")
 _camera = alex_camera.cameraOpen()  # open the camera before first use.
-_frames_remaining = 5               # frames remaining before further captures are refused
+_frames_remaining = 10              # frames remaining before further captures are refused
 
 
 def handleCameraCommand():
@@ -482,12 +482,15 @@ def runCommandInterface():
     print("Sensor interface ready. Controls:\n" \
     "  e  E-stop\n" \
     "  c  color reading\n" \
-    "  p  capture and display a camera frame\n" \
-    "  l  single LIDAR scan\n" \
+    "  p  photo capture\n" \
+    # "  l  single LIDAR scan\n" \
     "  w/a/s/d move forward/left/backward/right\n" \
-    "  +/- increase/decrease speed\n" \
-    "  q  stop movement\n")
-    print("Press Ctrl+C to exit.\n")
+    "  +/- increase/decrease movement speed\n" \
+    "  q  stop movement\n" \
+    "  h home robot arm\n" \
+    "  b/s/e/gxxx move arm base/shoulder/elbow/gripper to angle xxx\n" \
+    "  vxxx change arm speed (msPerTick) to xxx\n" \
+    "Press Ctrl+C to exit.\n")
 
     while True:
         if _ser.in_waiting >= FRAME_SIZE:

@@ -23,10 +23,10 @@
 #include "robotlib.h"
 
 volatile unsigned long lastInterruptTime = 0;
-const unsigned long DEBOUNCE_DELAY = 50; // experimental
+const unsigned long DEBOUNCE_DELAY = 50; // 50ms between button presses
 volatile uint8_t buttonPhase = 0; // for the button
-volatile uint32_t edgeCount = 0; // for the color sensor
-volatile uint8_t timerDone = 0;
+volatile uint32_t edgeCount = 0;  // for the color sensor
+volatile uint8_t timerDone = 0;   // also for the color sensor
 unsigned long speed = 150; // (default) motor speed 
 
 // =============================================================
@@ -583,7 +583,7 @@ static void handleCommand(const TPacket *cmd) {
         
         case COMMAND_ARM_SPEED:
             {
-                msPerDeg = constrain(cmd->params[0], 1, 50);
+                msPerDeg = constrain(cmd->params[0], 20, 50);
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_OK;
