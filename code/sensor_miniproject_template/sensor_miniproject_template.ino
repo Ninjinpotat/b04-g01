@@ -54,7 +54,9 @@ double volatile target_state[] = {2300,3666,3688,1750};
 #define E_CHECKPOINT 20000
 #define G_CHECKPOINT 30000
 
-extern volatile unsigned long sys_ms; 
+// Ensure you have the sys_ms variable defined at the top of your file
+// from our bare-metal Timer 2 clock!
+extern volatile unsigned long sys_ms = 0; 
 
 // =============================================================
 // Packet helpers
@@ -129,9 +131,6 @@ ISR(INT1_vect) {
 // Color sensor (TCS3200) - BARE METAL ON TIMER 2
 // =============================================================
 
-volatile uint32_t edgeCount = 0;
-volatile uint8_t timerDone = 0;
-
 // Variables to handle the 8-bit timer tracking 100ms
 volatile uint8_t color_window_active = 0;
 volatile uint8_t color_ms_count = 0;
@@ -168,6 +167,7 @@ ISR(INT4_vect) {
 
 // Timer 2 Interrupt - Fires exactly once every 1 millisecond
 ISR(TIMER2_COMPA_vect) {
+    sys_ms++;
     if (color_window_active) {
         color_ms_count++;
         if (color_ms_count >= 100) {  // 100ms window reached!
@@ -216,9 +216,6 @@ int parse3 (const String *s) {
   if (!isDigit(s->charAt(0)) || !isDigit(s->charAt(1)) || !isDigit(s->charAt(2))) return -1;
   return (s->charAt(0) - '0') * 100 + (s->charAt(1) - '0') * 10 + (s->charAt(2) - '0');
 }
-
-// Ensure you have the sys_ms variable defined at the top of your file
-// from our bare-metal Timer 2 clock!
 
 void updateSmoothMotion() {
   unsigned long now = sys_ms; // BARE-METAL: Replaced millis() with our custom sys_ms
@@ -542,7 +539,7 @@ static void handleCommand(const TPacket *cmd) {
         
         case COMMAND_ARM_BASE:
             {
-                int deg = constrain(pkt.params[0], 0, 180);
+                int deg = constrain(cmd->params[0], 0, 180);
                 target_state[0] = 1600 + (deg / 180.0) * 3000;
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
@@ -553,7 +550,7 @@ static void handleCommand(const TPacket *cmd) {
         
         case COMMAND_ARM_SHOULDER:
             {
-                int deg = constrain(pkt.params[0], 0, 180);
+                int deg = constrain(cmd->params[0], 0, 180);
                 target_state[1] = 2222 + (deg / 180.0) * 2888;
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
@@ -564,7 +561,7 @@ static void handleCommand(const TPacket *cmd) {
         
         case COMMAND_ARM_ELBOW:
             {
-                int deg = constrain(pkt.params[0], 0, 180);
+                int deg = constrain(cmd->params[0], 0, 180);
                 target_state[2] = 2300 + (deg / 180.0) * 2777;
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
@@ -575,7 +572,7 @@ static void handleCommand(const TPacket *cmd) {
         
         case COMMAND_ARM_GRIPPER:
             {
-                int deg = constrain(pkt.params[0], 0, 180);
+                int deg = constrain(cmd->params[0], 0, 180);
                 target_state[3] = 1450 + (deg / 180.0) * 600;
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
@@ -586,7 +583,7 @@ static void handleCommand(const TPacket *cmd) {
         
         case COMMAND_ARM_SPEED:
             {
-                msPerDeg = constrain(pkt.params[0], 1, 50);
+                msPerDeg = constrain(cmd->params[0], 1, 50);
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_OK;
@@ -614,9 +611,8 @@ void setup() {
     initEdgeInterrupt();
     initColorSensorPins();
     initTimer2_ColorSensor();
-    initTimer5();
-    
-    sei(); //re-enable interrupts
+    initArmTimer5();
+    sei();
 }
 
 void loop() {
