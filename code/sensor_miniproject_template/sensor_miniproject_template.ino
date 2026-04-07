@@ -219,9 +219,9 @@ int parse3 (const String *s) {
 
 void updateSmoothMotion() {
   unsigned long now = sys_ms; // BARE-METAL: Replaced millis() with our custom sys_ms
-  if (now - lastStep < msPerDeg) return;
+  if (now - lastStep < msPerDeg) {return;}
+
   lastStep = now;
- 
   // Disable interrupts temporarily for safe array updating
   cli(); 
   for (int k = 0; k < 4; k++) {
@@ -241,6 +241,7 @@ void updateSmoothMotion() {
 
 // CHANGED TO TIMER 5 and PORT K
 ISR(TIMER5_COMPB_vect) {
+  
   switch (stagecount) {
     case 0:
       // Turn ON base servo (PORTK bit 0 is A8)

@@ -151,24 +151,29 @@ def receiveFrame():
     MAGIC_HI = MAGIC[0]
     MAGIC_LO = MAGIC[1]
 
-    while True:
-        # Read and discard bytes until we see the first magic byte.
+    # NON BLOCKING VERSION
+     # Don't attempt to read unless there are enough bytes for a full frame
+    if _ser.in_waiting < FRAME_SIZE:
+        return None
+
+    # Search for magic number, discarding bytes one at a time
+    while _ser.in_waiting >= 1:
         b = _ser.read(1)
-        if not b:
-            return None          # timeout
-        if b[0] != MAGIC_HI:
+        if not b or b[0] != MAGIC_HI:
             continue
 
-        # Read the second magic byte.
-        b = _ser.read(1)
-        if not b:
+        if _ser.in_waiting < 1:
             return None
-        if b[0] != MAGIC_LO:
-            # Not the magic number; keep searching (don't skip the byte
-            # we just read in case it is the first byte of another frame).
+        b2 = _ser.read(1)
+        if not b2:
+            return None
+        if b2[0] != MAGIC_LO:
             continue
 
-        # Magic matched; now read the TPacket body.
+        # Magic matched — check we have the rest of the frame
+        if _ser.in_waiting < TPACKET_SIZE + 1:
+            return None  # not enough bytes yet, try next loop iteration
+
         raw = b''
         while len(raw) < TPACKET_SIZE:
             chunk = _ser.read(TPACKET_SIZE - len(raw))
@@ -176,16 +181,15 @@ def receiveFrame():
                 return None
             raw += chunk
 
-        # Read and verify the checksum.
         cs_byte = _ser.read(1)
         if not cs_byte:
             return None
-        expected = computeChecksum(raw)
-        if cs_byte[0] != expected:
-            # Checksum mismatch: corrupted packet, try to resync.
-            continue
+        if cs_byte[0] != computeChecksum(raw):
+            continue  # bad checksum, keep searching
 
         return unpackTPacket(raw)
+
+    return None
 
 
 def sendCommand(commandType, data=b'', params=None):
@@ -493,22 +497,22 @@ def runCommandInterface():
     "Press Ctrl+C to exit.\n")
 
     while True:
-        if _ser.in_waiting >= FRAME_SIZE:
-            pkt = receiveFrame()
-            if pkt:
-                printPacket(pkt)
-                relay.onPacketReceived(packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params']))
+        # if _ser.in_waiting >= FRAME_SIZE:
+        pkt = receiveFrame()
+        if pkt:
+            printPacket(pkt)
+            relay.onPacketReceived(packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params']))
 
         rlist, _, _ = select.select([sys.stdin], [], [], 0)
         if rlist:
             line = sys.stdin.readline().strip().lower()
-            if not line:
-                time.sleep(0.05)
-                continue
-            handleUserInput(line)
+            if line:
+                # time.sleep(0.05)
+                # continue
+                handleUserInput(line)
 
         relay.checkSecondTerminal(_ser)
-        time.sleep(0.05)
+        time.sleep(0.02)
 
 
 # ----------------------------------------------------------------
