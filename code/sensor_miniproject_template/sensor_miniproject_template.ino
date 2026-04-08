@@ -359,6 +359,13 @@ static void handleCommand(const TPacket *cmd) {
 
         case COMMAND_COLOR:
             {
+                initEdgeInterrupt();
+                initColorSensorPins();
+                initTimer2_ColorSensor();
+
+                TIMSK5 &= ~0b00000110; //PAUSE THE ARM TIMER
+                PORTK &= ~0b00001111;
+
                 TPacket pkt = {0};
                 //memset(&pkt, 0, sizeof(pkt));
                 pkt.packetType = PACKET_TYPE_RESPONSE;
@@ -373,6 +380,9 @@ static void handleCommand(const TPacket *cmd) {
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
+
+            TIMSK5 |= 0b00000110; //reenable arm timer
+            EIMSK &= ~(1 << INT2); //disable INT2 when done to prevent arm tweaking
             break;
         
         case COMMAND_W:
@@ -608,9 +618,7 @@ void setup() {
     EIMSK = 0b00000010; //enable INT1
     
     //Other setups
-    initEdgeInterrupt();
-    initColorSensorPins();
-    initTimer2_ColorSensor();
+    // 
     initArmTimer5();
     sei();
 }
