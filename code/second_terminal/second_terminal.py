@@ -58,7 +58,7 @@ from net_utils import TCPClient, sendTPacketFrame, recvTPacketFrame
 # ---------------------------------------------------------------------------
 # Both scripts run on the same Pi, so the host is 'localhost'.
 # Change PI_HOST to the Pi's IP address if you run this from a different machine.
-PI_HOST = 'localhost'
+PI_HOST = '100.102.69.94'
 PI_PORT = 65432
 
 

@@ -330,6 +330,7 @@ void initArmTimer5() {
 // =============================================================
 
 dir lastMove = STOP;
+unsigned long lastMoveTime = 0;
 
 static void handleCommand(const TPacket *cmd) {
     if (cmd->packetType != PACKET_TYPE_COMMAND) return;
@@ -397,6 +398,7 @@ static void handleCommand(const TPacket *cmd) {
 
                 forward(speed);
                 lastMove = GO;
+                lastMoveTime = millis(); //sys_ms?
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -414,6 +416,7 @@ static void handleCommand(const TPacket *cmd) {
 
                 cw(speed);
                 lastMove = CW;
+                lastMoveTime = millis(); //sys_ms?
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -431,6 +434,7 @@ static void handleCommand(const TPacket *cmd) {
 
                 backward(speed);
                 lastMove = BACK;
+                lastMoveTime = millis(); //sys_ms?
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -448,6 +452,7 @@ static void handleCommand(const TPacket *cmd) {
 
                 ccw(speed);
                 lastMove = CCW;
+                lastMoveTime = millis(); //sys_ms?
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -618,7 +623,7 @@ void setup() {
     EIMSK = 0b00000010; //enable INT1
     
     //Other setups
-    // 
+    //color sensor init moved to COLOR_COMMAND
     initArmTimer5();
     sei();
 }
@@ -638,5 +643,14 @@ void loop() {
     if (receiveFrame(&incoming)) {
         handleCommand(&incoming);
     }
+
+    // --- 3. Watchdog Timer ---
+    //if moving but no cmd received in 250ms, stop
+    if (lastMove != STOP && (millis() - lastMoveTime > 250)) {
+        stop();
+        lastMove = STOP;
+    }
+
+    // --- 4. Move arm ---
     updateSmoothMotion();
 }

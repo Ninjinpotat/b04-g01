@@ -44,14 +44,14 @@ void move(int speed, int direction)
         motorBR.run(BACKWARD); 
       break;
       case CW: //called by COMMAND_A ie left turn
-        motorFL.run(RELEASE);
+        motorFL.run(BACKWARD);
         motorFR.run(FORWARD);
         motorBL.run(FORWARD);
         motorBR.run(BACKWARD); 
       break;
       case CCW: //called by COMMAND_D ie right turn
         motorFL.run(FORWARD);
-        motorFR.run(RELEASE);
+        motorFR.run(BACKWARD);
         motorBL.run(BACKWARD);
         motorBR.run(FORWARD); 
       break;
