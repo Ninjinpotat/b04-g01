@@ -478,98 +478,43 @@ def handleUserInput(line):
         print(f"Unknown input: '{line}'. Valid: e, c, p, l, w, a, s, d, +, -, q")
 
 
-# def runCommandInterface():
-#     """
-#     Main command loop.
+def runCommandInterface():
+    """
+    Main command loop.
 
-#     Uses select.select() to simultaneously receive packets from the Arduino
-#     and read typed user input from stdin without either blocking the other.
-#     """
-#     print("Sensor interface ready. Controls:\n" \
-#     "  e  E-stop\n" \
-#     "  c  color reading\n" \
-#     "  p  photo capture\n" \
-#     # "  l  single LIDAR scan\n" \
-#     "  w/a/s/d move forward/left/backward/right\n" \
-#     "  +/- increase/decrease movement speed\n" \
-#     "  q  stop movement\n" \
-#     "  h home robot arm\n" \
-#     "  b/s/e/gxxx move arm base/shoulder/elbow/gripper to angle xxx\n" \
-#     "  vxxx change arm speed (msPerTick) to xxx\n" \
-#     "Press Ctrl+C to exit.\n")
-
-#     while True:
-#         # if _ser.in_waiting >= FRAME_SIZE:
-#         pkt = receiveFrame()
-#         if pkt:
-#             printPacket(pkt)
-#             relay.onPacketReceived(packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params']))
-
-#         rlist, _, _ = select.select([sys.stdin], [], [], 0)
-#         if rlist:
-#             line = sys.stdin.readline().strip().lower()
-#             if line:
-#                 # time.sleep(0.05)
-#                 # continue
-#                 handleUserInput(line)
-
-#         relay.checkSecondTerminal(_ser)
-#         time.sleep(0.02)
-
-def runCommandInterface(): # new version - hold WASD to drive
+    Uses select.select() to simultaneously receive packets from the Arduino
+    and read typed user input from stdin without either blocking the other.
+    """
     print("Sensor interface ready. Controls:\n" \
     "  e  E-stop\n" \
     "  c  color reading\n" \
     "  p  photo capture\n" \
-    "  w/a/s/d HOLD to move, RELEASE to stop\n" \
+    # "  l  single LIDAR scan\n" \
+    "  w/a/s/d move forward/left/backward/right\n" \
     "  +/- increase/decrease movement speed\n" \
     "  q  stop movement\n" \
-    "  h  home robot arm\n" \
+    "  h home robot arm\n" \
     "  b/s/e/gxxx move arm base/shoulder/elbow/gripper to angle xxx\n" \
     "  vxxx change arm speed (msPerTick) to xxx\n" \
     "Press Ctrl+C to exit.\n")
 
-    # Save the standard terminal settings so we don't break the user's terminal
-    old_settings = termios.tcgetattr(sys.stdin)
-    
-    try:
-        # Set terminal to "cbreak" mode (Reads characters instantly without Enter)
-        tty.setcbreak(sys.stdin.fileno())
-        input_buffer = ""
+    while True:
+        # if _ser.in_waiting >= FRAME_SIZE:
+        pkt = receiveFrame()
+        if pkt:
+            printPacket(pkt)
+            relay.onPacketReceived(packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params']))
 
-        while True:
-            pkt = receiveFrame()
-            if pkt:
-                printPacket(pkt)
-                relay.onPacketReceived(packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params']))
+        rlist, _, _ = select.select([sys.stdin], [], [], 0)
+        if rlist:
+            line = sys.stdin.readline().strip().lower()
+            if line:
+                # time.sleep(0.05)
+                # continue
+                handleUserInput(line)
 
-            rlist, _, _ = select.select([sys.stdin], [], [], 0)
-            if rlist:
-                char = sys.stdin.read(1)
-                lower_char = char.lower()
-
-                # INSTANT GAMEPAD KEYS (Only driving keys trigger instantly)
-                if lower_char in ['w', 'a', 's', 'd', '+', '-']:
-                    handleUserInput(lower_char)
-                    input_buffer = "" # Clear buffer if they were typing something else
-                
-                # BUFFERED KEYS (Requires Enter for e, c, p, h, b090, etc.)
-                elif char == '\n' or char == '\r':
-                    if input_buffer:
-                        print(f"Command Sent: {input_buffer}")
-                        handleUserInput(input_buffer.lower())
-                        input_buffer = ""
-                
-                # BUILD THE BUFFER
-                else:
-                    input_buffer += char
-
-            relay.checkSecondTerminal(_ser)
-            time.sleep(0.02)
-            
-    finally:
-        # ALWAYS restore standard terminal behavior when the script closes
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        relay.checkSecondTerminal(_ser)
+        time.sleep(0.02)
 
 # ----------------------------------------------------------------
 # MAIN

@@ -338,23 +338,30 @@ static void handleCommand(const TPacket *cmd) {
         case COMMAND_ESTOP:
             cli();
             if (buttonState == STATE_STOPPED) {
+                // STARTING THE ROBOT VIA SOFTWARE
                 buttonState = STATE_RUNNING;
+                buttonPhase = 0; // WAKE UP: Reset hardware memory to Phase 0
             } else {
+                // STOPPING THE ROBOT VIA SOFTWARE
                 buttonState = STATE_STOPPED;
+                buttonPhase = 2; // SLEEP: Fast-forward hardware memory to Phase 2 (Pretend it was pressed & released)
             }
             stateChanged = false;
             sei();
+            
             {
                 TPacket pkt;
                 memset(&pkt, 0, sizeof(pkt));
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_OK;
-                // strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                // pkt.data[sizeof(pkt.data) - 1] = '\0';
                 sendFrame(&pkt);
             }
             sendStatus(buttonState);
-            stop(); //must stop the motors during estop!
+            
+            // Safety: Only hit the brakes if we just STOPPED the robot!
+            if (buttonState == STATE_STOPPED) {
+                stop(); 
+            }
             break;
 
         case COMMAND_COLOR:

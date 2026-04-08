@@ -186,20 +186,31 @@ def _printPacket(pkt):
 
 def _handleInput(line: str, client: TCPClient):
     """Handle one line of keyboard input."""
+    global _estop_active # <--- Tell Python to look at our safety variable!
+
     line = line.strip().lower()
     if not line:
         return
 
+    # 1. ALLOW 'e' AND 'q' ALWAYS (So we can un-pause or quit)
     if line == 'e':
         frame = _packFrame(PACKET_TYPE_COMMAND, COMMAND_ESTOP)
         sendTPacketFrame(client.sock, frame)
         print("[second_terminal] Sent: E-STOP")
+        return
 
     elif line == 'q':
         print("[second_terminal] Quitting.")
         raise KeyboardInterrupt
 
-    elif line == 'h':
+    # 2. THE E-STOP GATE
+    # If we get past 'e' and 'q', check the E-Stop state before allowing anything else!
+    if _estop_active:
+        print("[second_terminal] Refused: E-Stop is active")
+        return
+
+    # 3. ARM COMMANDS (Only runs if E-Stop is False)
+    if line == 'h':
         frame = _packFrame(PACKET_TYPE_COMMAND, COMMAND_ARM_HOME)
         sendTPacketFrame(client.sock, frame)
         print("[second_terminal] Sent: HOME")
@@ -230,8 +241,8 @@ def _handleInput(line: str, client: TCPClient):
         print(f"[second_terminal] Sent: {line[0]} to {deg}")
         
     else:
-        print(f"[second_terminal] Unknown: '{line}'. \
-              Valid: e (E-stop), h (Home), b/s/e/g/v + angle, q (quit)")
+        print(f"[second_terminal] Unknown: '{line}'. "
+              f"Valid: e (E-stop), h (Home), b/s/e/g/v + angle, q (quit)")
 
 
 # ---------------------------------------------------------------------------
