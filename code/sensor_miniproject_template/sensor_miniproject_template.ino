@@ -35,7 +35,7 @@ unsigned long speed = 150; // (default) motor speed
 
 #define STEP_TICKS 11 //calculated for 1 degree increase
 unsigned long lastStep = 0;
-int msPerDeg = 10;
+int msPerDeg = 10; // (default) servo speed
 
 // Updated to the PORTK analog pins on the Mega
 const int BASE_PIN     = A8;  // PK0
@@ -45,8 +45,8 @@ const int GRIPPER_PIN  = A11; // PK3
 
 int stagecount = 0;
 
-double volatile curr_state[]   = {2300,3666,3688,1750};
-double volatile target_state[] = {2300,3666,3688,1750};
+int volatile curr_state[]   = {2300,3666,3688,1750};
+int volatile target_state[] = {2300,3666,3688,1750};
 
 // Define checkpoints for each servo (spacing them out in the 20ms period)
 #define B_CHECKPOINT 0
@@ -156,12 +156,12 @@ static void initColorSensorPins() {
 }
 
 static void initEdgeInterrupt() {
-    EICRB |= (1 << ISC41) | (1 << ISC40);  // rising edge trigger
-    EIMSK |= (1 << INT4);                  // enable INT4 (Pin 19)
+    EICRB |= (1 << ISC21) | (1 << ISC20);  // rising edge trigger
+    EIMSK |= (1 << INT2);                  // enable INT2 (Pin 19)
 }
 
 // Counts the frequency pulses from the sensor
-ISR(INT4_vect) {
+ISR(INT2_vect) {
     edgeCount++;
 }
 
@@ -218,12 +218,11 @@ int parse3 (const String *s) {
 }
 
 void updateSmoothMotion() {
-  unsigned long now = sys_ms; // BARE-METAL: Replaced millis() with our custom sys_ms
+  unsigned long now = millis(); 
   if (now - lastStep < msPerDeg) {return;}
-
-  lastStep = now;
+   lastStep = now;
   // Disable interrupts temporarily for safe array updating
-  cli(); 
+  //cli(); 
   for (int k = 0; k < 4; k++) {
     if (curr_state[k] < target_state[k]) {
       curr_state[k] += STEP_TICKS;
@@ -236,12 +235,12 @@ void updateSmoothMotion() {
         curr_state[k] = target_state[k];
     }
   }
-  sei(); 
+//   sei(); 
 }
 
 // CHANGED TO TIMER 5 and PORT K
 ISR(TIMER5_COMPB_vect) {
-  
+ 
   switch (stagecount) {
     case 0:
       // Turn ON base servo (PORTK bit 0 is A8)
@@ -297,7 +296,7 @@ ISR(TIMER5_COMPB_vect) {
 
 // CHANGED TO TIMER 5
 ISR(TIMER5_COMPA_vect) {
-  updateSmoothMotion();
+  //updateSmoothMotion();
 }
 
 // Call this from your main setup() function
@@ -631,4 +630,5 @@ void loop() {
     if (receiveFrame(&incoming)) {
         handleCommand(&incoming);
     }
+    updateSmoothMotion();
 }

@@ -11,10 +11,10 @@ typedef enum dir
 } dir;
 
 // Motor control - post repositioning of mega
-#define FRONT_LEFT   1 // M4 on the driver shield
-#define FRONT_RIGHT  4 // M1 on the driver shield
-#define BACK_LEFT    2 // M3 on the driver shield
-#define BACK_RIGHT   3 // M2 on the driver shield
+#define FRONT_LEFT   1 
+#define FRONT_RIGHT  4 
+#define BACK_LEFT    2 
+#define BACK_RIGHT   3 
 
 AF_DCMotor motorFL(FRONT_LEFT);
 AF_DCMotor motorFR(FRONT_RIGHT);
@@ -44,14 +44,14 @@ void move(int speed, int direction)
         motorBR.run(BACKWARD); 
       break;
       case CW: //called by COMMAND_A ie left turn
-        motorFL.run(BACKWARD);
+        motorFL.run(RELEASE);
         motorFR.run(FORWARD);
         motorBL.run(FORWARD);
         motorBR.run(BACKWARD); 
       break;
       case CCW: //called by COMMAND_D ie right turn
         motorFL.run(FORWARD);
-        motorFR.run(BACKWARD);
+        motorFR.run(RELEASE);
         motorBL.run(BACKWARD);
         motorBR.run(FORWARD); 
       break;
