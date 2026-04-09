@@ -121,10 +121,10 @@ class SlamApp(App[None]):
         Binding('q',     'quit',        'Quit'),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, pss: ProcessSharedState) -> None:
         super().__init__()
         # Shared state object passed to the SLAM process.
-        self.pss = ProcessSharedState()
+        self.pss = pss
         # SLAM runs in a separate child process so it has its own GIL.
         self.slam_proc = multiprocessing.Process(
             target=run_slam_process,

@@ -17,7 +17,7 @@ import ctypes
 import multiprocessing
 import multiprocessing.shared_memory
 
-from settings import MAP_SIZE_PIXELS, UNKNOWN_BYTE
+from settings import MAP_SIZE_PIXELS, UNKNOWN_BYTE, SCAN_SIZE
 
 
 class ProcessSharedState:
@@ -65,6 +65,10 @@ class ProcessSharedState:
         self.rounds_seen = multiprocessing.Value(ctypes.c_int, 0)
         self.map_version = multiprocessing.Value(ctypes.c_int, 0)
         self.pose_version = multiprocessing.Value(ctypes.c_int, 0)
+
+        # Updated code: Latest resampled scan (written by slam_process, read by lidar forward thread)
+        self.scan_distances = multiprocessing.Array(ctypes.c_int, SCAN_SIZE)
+        self.scan_version = multiprocessing.Value(ctypes.c_int, 0)
 
         # Status flags.
         self.connected = multiprocessing.Value(ctypes.c_bool, False)

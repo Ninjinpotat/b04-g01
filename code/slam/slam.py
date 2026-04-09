@@ -27,7 +27,14 @@ import os
 # (e.g. 'import settings') work correctly when the file is run as a script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ui import run
+from ui import SlamApp
+from lidar_forward import start_forwarder
+from shared_state import ProcessSharedState
+
+def run():
+    pss = ProcessSharedState()          # create shared state here
+    start_forwarder(pss)                # start TCP forwarder thread
+    SlamApp(pss).run()
 
 if __name__ == '__main__':
     run()

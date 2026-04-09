@@ -188,6 +188,10 @@ def run_slam_process(pss: ProcessSharedState) -> None:
 
             # Choose which scan to feed SLAM.
             if valid >= MIN_VALID_POINTS:
+                # write good scane into shared update before updating 
+                for i, d in enumerate(scan_distances):
+                    pss.scan_distances[i] = d
+                pss.scan_version.value += 1
                 # Enough fresh data: do a full SLAM update.
                 slam.update(scan_distances, scan_angles_degrees=_SCAN_ANGLES)
                 previous_distances = list(scan_distances)

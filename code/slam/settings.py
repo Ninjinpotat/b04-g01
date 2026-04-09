@@ -24,18 +24,19 @@ LIDAR_BAUD = 115200
 
 # Side length of the square occupancy map in pixels.
 # Larger values give finer spatial resolution but use more memory.
-MAP_SIZE_PIXELS = 1000
+MAP_SIZE_PIXELS = 600
 
 # Real-world area the map covers, in metres.
 # The map will span MAP_SIZE_METERS x MAP_SIZE_METERS metres.
-MAP_SIZE_METERS = 8
+MAP_SIZE_METERS = 5
 
 # How aggressively new LIDAR scans update the map (1 = slow, 10 = fast).
 # Lower values produce smoother maps; higher values react faster to changes.
-MAP_QUALITY = 10
+MAP_QUALITY = 3
+
 
 # Maximum gap (in mm) that BreezySLAM treats as a continuous wall.
-HOLE_WIDTH_MM = 100
+HOLE_WIDTH_MM = 400
 
 # ===========================================================================
 # Scan settings
@@ -75,7 +76,7 @@ MAX_DISTANCE_MM = 12000
 # measure the CCW angle from the robot's forward to the LIDAR's forward.
 #
 # The default of 0 assumes the LIDAR's forward direction matches the robot's.
-LIDAR_OFFSET_DEG = 0
+LIDAR_OFFSET_DEG = -90
 
 # ===========================================================================
 # Scan quality thresholds

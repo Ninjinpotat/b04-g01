@@ -319,7 +319,7 @@ import alex_camera                  # import the camera library provided (alex_c
 
 print("Initializing camera...")
 _camera = alex_camera.cameraOpen()  # open the camera before first use.
-_frames_remaining = 100              # frames remaining before further captures are refused
+_frames_remaining = 10              # frames remaining before further captures are refused
 
 
 def handleCameraCommand():

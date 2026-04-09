@@ -27,7 +27,8 @@ const unsigned long DEBOUNCE_DELAY = 50; // 50ms between button presses
 volatile uint8_t buttonPhase = 0; // for the button
 volatile uint32_t edgeCount = 0;  // for the color sensor
 volatile uint8_t timerDone = 0;   // also for the color sensor
-unsigned long speed = 150; // (default) motor speed 
+unsigned long speed = 150; // (default) motor speed
+
 
 // =============================================================
 // SERVO ARM consts
@@ -130,6 +131,11 @@ ISR(INT1_vect) {
 // =============================================================
 // Color sensor (TCS3200) - BARE METAL ON TIMER 2
 // =============================================================
+// Non-blocking Color Sensor Variables
+enum ColorState { COLOR_IDLE, COLOR_READ_R, COLOR_READ_G, COLOR_READ_B };
+ColorState currentColorState = COLOR_IDLE;
+uint32_t red_val = 0, green_val = 0, blue_val = 0;
+bool colorContinuous = true; // Set to true to start sensing immediately
 
 // Variables to handle the 8-bit timer tracking 100ms
 volatile uint8_t color_window_active = 0;
@@ -177,7 +183,7 @@ ISR(TIMER2_COMPA_vect) {
     }
 }
 
-static uint32_t measureChannel(uint8_t s2, uint8_t s3) {
+static void startMeasurement(uint8_t s2, uint8_t s3) {
     /* Set S2 */
     if (s2) PORTA |= (1 << PA2);
     else    PORTA &= ~(1 << PA2);
@@ -185,25 +191,56 @@ static uint32_t measureChannel(uint8_t s2, uint8_t s3) {
     if (s3) PORTA |= (1 << PA3);
     else    PORTA &= ~(1 << PA3);
 
-    // Reset counters
+    // Reset counters and start the hardware timer window
     edgeCount = 0;
     timerDone = 0;
     color_ms_count = 0;
-    
-    // Start the 100ms hardware timer window
     color_window_active = 1; 
-    
-    // Bare-metal wait. The Timer 2 ISR will break this loop after 100ms.
-    while (!timerDone); 
-    
-    return edgeCount;
 }
 
-static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
-    // Set S2/S3 for each channel, measure edge count, multiply by 10
-    *r = measureChannel(0, 0) * 10;  // red,   in Hz
-    *g = measureChannel(1, 1) * 10;  // green, in Hz
-    *b = measureChannel(0, 1) * 10;  // blue,  in Hz
+static void updateContinuousColor() {
+    if (!colorContinuous) return;
+
+    switch (currentColorState) {
+        case COLOR_IDLE:
+            startMeasurement(0, 0); // Start measuring Red
+            currentColorState = COLOR_READ_R;
+            break;
+
+        case COLOR_READ_R:
+            if (timerDone) {
+                red_val = edgeCount * 10;
+                startMeasurement(1, 1); // Start measuring Green
+                currentColorState = COLOR_READ_G;
+            }
+            break;
+
+        case COLOR_READ_G:
+            if (timerDone) {
+                green_val = edgeCount * 10;
+                startMeasurement(0, 1); // Start measuring Blue
+                currentColorState = COLOR_READ_B;
+            }
+            break;
+
+        case COLOR_READ_B:
+            if (timerDone) {
+                blue_val = edgeCount * 10;
+                
+                // All 3 channels are done. Send the packet to Pi!
+                TPacket pkt = {0};
+                pkt.packetType = PACKET_TYPE_RESPONSE;
+                pkt.command    = RESP_COLOR;
+                pkt.params[0]  = red_val;
+                pkt.params[1]  = green_val;
+                pkt.params[2]  = blue_val;
+                sendFrame(&pkt);
+
+                // Reset to IDLE to start the next cycle automatically
+                currentColorState = COLOR_IDLE; 
+            }
+            break;
+    }
 }
 
 // =============================================================
@@ -330,7 +367,7 @@ void initArmTimer5() {
 // =============================================================
 
 dir lastMove = STOP;
-
+unsigned long lastMoveTime = 0;
 static void handleCommand(const TPacket *cmd) {
     if (cmd->packetType != PACKET_TYPE_COMMAND) return;
 
@@ -366,30 +403,14 @@ static void handleCommand(const TPacket *cmd) {
 
         case COMMAND_COLOR:
             {
-                initEdgeInterrupt();
-                initColorSensorPins();
-                initTimer2_ColorSensor();
-
-                TIMSK5 &= ~0b00000110; //PAUSE THE ARM TIMER
-                PORTK &= ~0b00001111;
-
+                // Toggle the continuous sensing on/off
+                colorContinuous = !colorContinuous; 
+                
                 TPacket pkt = {0};
-                //memset(&pkt, 0, sizeof(pkt));
                 pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_COLOR;
-                uint32_t r,g,b;
-                readColorChannels(&r, &g, &b);
-                pkt.params[0] = r;
-                pkt.params[1] = g;
-                pkt.params[2] = b;
-                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                //pkt.data[sizeof(pkt.data) - 1] = '\0';
+                pkt.command    = RESP_OK;
                 sendFrame(&pkt);
             }
-            sendStatus(STATE_RUNNING);
-
-            TIMSK5 |= 0b00000110; //reenable arm timer
-            EIMSK &= ~(1 << INT2); //disable INT2 when done to prevent arm tweaking
             break;
         
         case COMMAND_W:
@@ -398,29 +419,33 @@ static void handleCommand(const TPacket *cmd) {
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
 
+                speed = 150; // Set speed for Forward
                 pkt.params[0] = speed;
                 strncpy(pkt.data, "Forwards", sizeof(pkt.data) - 1);
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
                 forward(speed);
                 lastMove = GO;
+                lastMoveTime = millis(); // Start the movement timer
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
             break;
         
         case COMMAND_A:
-        {   
+            {   
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
 
+                speed = 250; // Set speed for Left Turn
                 pkt.params[0] = speed;
                 strncpy(pkt.data, "Left turn", sizeof(pkt.data) - 1);
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
                 cw(speed);
                 lastMove = CW;
+                lastMoveTime = millis(); // Start the movement timer
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -432,12 +457,14 @@ static void handleCommand(const TPacket *cmd) {
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
 
+                speed = 150; // Set speed for Backwards
                 pkt.params[0]  = speed;
                 strncpy(pkt.data, "Backwards", sizeof(pkt.data) - 1);
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
                 backward(speed);
                 lastMove = BACK;
+                lastMoveTime = millis(); // Start the movement timer
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -449,12 +476,14 @@ static void handleCommand(const TPacket *cmd) {
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_MOVEMENT;
 
+                speed = 250; // Set speed for Right Turn
                 pkt.params[0] = speed;
                 strncpy(pkt.data, "Right turn", sizeof(pkt.data) - 1);
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
                 ccw(speed);
                 lastMove = CCW;
+                lastMoveTime = millis(); // Start the movement timer
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -473,22 +502,22 @@ static void handleCommand(const TPacket *cmd) {
                 strncpy(pkt.data, "Increasing speed by 10", sizeof(pkt.data) - 1);
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                switch (lastMove) { //execute last movement with updated speed
-                    case GO:
-                        forward(speed);
-                        break;
-                    case BACK:
-                        backward(speed);
-                        break;
-                    case CCW:
-                        ccw(speed);
-                        break;
-                    case CW:
-                        cw(speed);
-                        break;
-                    case STOP: //do nothing
-                        break;
-                }
+                // switch (lastMove) { //execute last movement with updated speed
+                //     case GO:
+                //         forward(speed);
+                //         break;
+                //     case BACK:
+                //         backward(speed);
+                //         break;
+                //     case CCW:
+                //         ccw(speed);
+                //         break;
+                //     case CW:
+                //         cw(speed);
+                //         break;
+                //     case STOP: //do nothing
+                //         break;
+                // }
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -507,22 +536,22 @@ static void handleCommand(const TPacket *cmd) {
                 strncpy(pkt.data, "Decreasing speed by 10", sizeof(pkt.data) - 1);
                 pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                switch (lastMove) { //execute last movement with updated speed
-                    case GO:
-                        forward(speed);
-                        break;
-                    case BACK:
-                        backward(speed);
-                        break;
-                    case CCW:
-                        ccw(speed);
-                        break;
-                    case CW:
-                        cw(speed);
-                        break;
-                    case STOP: //do nothing
-                        break;
-                }
+                // switch (lastMove) { //execute last movement with updated speed
+                //     case GO:
+                //         forward(speed);
+                //         break;
+                //     case BACK:
+                //         backward(speed);
+                //         break;
+                //     case CCW:
+                //         ccw(speed);
+                //         break;
+                //     case CW:
+                //         cw(speed);
+                //         break;
+                //     case STOP: //do nothing
+                //         break;
+                // }
                 sendFrame(&pkt);
             }
             sendStatus(STATE_RUNNING);
@@ -568,7 +597,7 @@ static void handleCommand(const TPacket *cmd) {
         case COMMAND_ARM_SHOULDER:
             {
                 int deg = constrain(cmd->params[0], 0, 180);
-                target_state[1] = 2222 + (deg / 180.0) * 2888;
+                target_state[1] = 2000 + (deg / 180.0) * 3110;
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_OK;
@@ -578,7 +607,7 @@ static void handleCommand(const TPacket *cmd) {
         
         case COMMAND_ARM_ELBOW:
             {
-                int deg = constrain(cmd->params[0], 0, 180);
+                int deg = constrain(cmd->params[0], 40, 140);
                 target_state[2] = 2300 + (deg / 180.0) * 2777;
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
@@ -589,7 +618,7 @@ static void handleCommand(const TPacket *cmd) {
         
         case COMMAND_ARM_GRIPPER:
             {
-                int deg = constrain(cmd->params[0], 0, 180);
+                int deg = constrain(cmd->params[0], 0, 150);
                 target_state[3] = 1450 + (deg / 180.0) * 600;
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
@@ -624,6 +653,11 @@ void setup() {
     EICRA = 0b00000100; //trigger INT1 on any logical change
     EIMSK = 0b00000010; //enable INT1
     
+    // --- ADD THESE LINES HERE ---
+    initEdgeInterrupt();
+    initColorSensorPins();
+    initTimer2_ColorSensor();
+
     //Other setups
     // 
     initArmTimer5();
@@ -645,5 +679,12 @@ void loop() {
     if (receiveFrame(&incoming)) {
         handleCommand(&incoming);
     }
+    // --- 3. Auto-Stop Timer for Discrete Movements ---
+    // If moving, automatically stop after 300 milliseconds
+    if (lastMove != STOP && (millis() - lastMoveTime > 300)) {
+        stop();
+        lastMove = STOP;
+    }
     updateSmoothMotion();
+    updateContinuousColor(); // Add this line!
 }
