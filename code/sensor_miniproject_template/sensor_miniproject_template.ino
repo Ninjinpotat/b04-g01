@@ -198,6 +198,44 @@ static void startMeasurement(uint8_t s2, uint8_t s3) {
     color_window_active = 1; 
 }
 
+// =============================================================
+// Color Classifier (k=1 Nearest Neighbour)
+// =============================================================
+
+struct ColorSample {
+    uint32_t r, g, b;
+    const char* label;
+};
+
+// Training data collected from physical measurements
+static const ColorSample COLOR_TRAINING[] = {
+    { 5290, 1550, 2040, "Red"   },
+    { 2750, 3860, 2360, "Green" },
+    { 2210, 4470, 6530, "Blue"  },
+    { 7960, 7720, 7350, "White" },
+    { 1740, 1820, 1580, "Brown" },
+};
+static const uint8_t NUM_COLORS = sizeof(COLOR_TRAINING) / sizeof(COLOR_TRAINING[0]);
+
+static const char* classifyColor(uint32_t r, uint32_t g, uint32_t b) {
+    uint32_t best_dist = UINT32_MAX;
+    const char* best_label = "Unknown";
+
+    for (uint8_t i = 0; i < NUM_COLORS; i++) {
+        // Use squared distance to avoid sqrt (safe since values are ~0-10000)
+        int32_t dr = (int32_t)r - (int32_t)COLOR_TRAINING[i].r;
+        int32_t dg = (int32_t)g - (int32_t)COLOR_TRAINING[i].g;
+        int32_t db = (int32_t)b - (int32_t)COLOR_TRAINING[i].b;
+        uint32_t dist = (uint32_t)(dr*dr) + (uint32_t)(dg*dg) + (uint32_t)(db*db);
+
+        if (dist < best_dist) {
+            best_dist = dist;
+            best_label = COLOR_TRAINING[i].label;
+        }
+    }
+    return best_label;
+}
+
 static void updateContinuousColor() {
     if (!colorContinuous) return;
 
@@ -226,7 +264,8 @@ static void updateContinuousColor() {
         case COLOR_READ_B:
             if (timerDone) {
                 blue_val = edgeCount * 10;
-                
+                const char* colorLabel = classifyColor(red_val, green_val, blue_val);
+
                 // All 3 channels are done. Send the packet to Pi!
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
@@ -234,6 +273,8 @@ static void updateContinuousColor() {
                 pkt.params[0]  = red_val;
                 pkt.params[1]  = green_val;
                 pkt.params[2]  = blue_val;
+                strncpy(pkt.data, colorLabel, sizeof(pkt.data) - 1);
+                pkt.data[sizeof(pkt.data) - 1] = '\0';
                 sendFrame(&pkt);
 
                 // Reset to IDLE to start the next cycle automatically

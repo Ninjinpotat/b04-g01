@@ -243,7 +243,8 @@ def printPacket(pkt):
 
         elif cmd == RESP_COLOR:
             r, g, b = pkt['params'][:3]
-            print(f"Color reading: R={r} Hz, G={g} Hz, B={b} Hz")
+            label = pkt['data'].rstrip(b'\x00').decode('utf-8')
+            print(f"Color reading: R={r} Hz, G={g} Hz, B={b} Hz | Detected: {label}")
 
         elif cmd == RESP_MOVEMENT:
             direction = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
@@ -319,7 +320,7 @@ import alex_camera                  # import the camera library provided (alex_c
 
 print("Initializing camera...")
 _camera = alex_camera.cameraOpen()  # open the camera before first use.
-_frames_remaining = 10              # frames remaining before further captures are refused
+_frames_remaining = 100       # frames remaining before further captures are refused
 
 
 def handleCameraCommand():
