@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-Studio 13: Sensor Mini-Project
 Raspberry Pi Sensor Interface — pi_sensor.py
 
 Extends the communication framework from Studio 12 with:
@@ -34,7 +33,6 @@ BAUDRATE = 9600
 
 _ser = None
 
-
 def openSerial():
     """Open the serial port and wait for the Arduino to boot."""
     global _ser
@@ -43,13 +41,11 @@ def openSerial():
     time.sleep(2)
     print("Ready.\n")
 
-
 def closeSerial():
     """Close the serial port."""
     global _ser
     if _ser and _ser.is_open:
         _ser.close()
-
 
 # ----------------------------------------------------------------
 # TPACKET CONSTANTS
@@ -99,14 +95,12 @@ TPACKET_FMT  = f'<BB2x{MAX_STR_LEN}s{PARAMS_COUNT}I'
 MAGIC = b'\xDE\xAD'          # 2-byte magic number (0xDEAD)
 FRAME_SIZE = len(MAGIC) + TPACKET_SIZE + 1   # 2 + 100 + 1 = 103
 
-
 def computeChecksum(data: bytes) -> int:
     """Return the XOR of all bytes in data."""
     result = 0
     for b in data:
         result ^= b
     return result
-
 
 def packFrame(packetType, command, data=b'', params=None):
     """
@@ -128,7 +122,6 @@ def packFrame(packetType, command, data=b'', params=None):
     checksum = computeChecksum(packet_bytes)
     return MAGIC + packet_bytes + bytes([checksum])
 
-
 def unpackTPacket(raw):
     """Deserialise a 100-byte TPacket into a dict."""
     fields = struct.unpack(TPACKET_FMT, raw)
@@ -138,7 +131,6 @@ def unpackTPacket(raw):
         'data':       fields[2],
         'params':     list(fields[3:]),
     }
-
 
 def receiveFrame():
     """
@@ -193,12 +185,10 @@ def receiveFrame():
 
     return None
 
-
 def sendCommand(commandType, data=b'', params=None):
     """Send a framed COMMAND packet to the Arduino."""
     frame = packFrame(PACKET_TYPE_COMMAND, commandType, data=data, params=params)
     _ser.write(frame)
-
 
 # ----------------------------------------------------------------
 # E-STOP STATE
@@ -206,11 +196,9 @@ def sendCommand(commandType, data=b'', params=None):
 
 _estop_state = STATE_RUNNING
 
-
 def isEstopActive():
     """Return True if the E-Stop is currently active (system stopped)."""
     return _estop_state == STATE_STOPPED
-
 
 # ----------------------------------------------------------------
 # PACKET DISPLAY
@@ -269,10 +257,10 @@ def printPacket(pkt):
     else:
         print(f"Packet: type={ptype}, cmd={cmd}")
 
-
 # ----------------------------------------------------------------
 # MOVEMENT INPUT
 # ----------------------------------------------------------------
+
 def handleMovementCommand(line):
     if isEstopActive():
         print("Refused: E-Stop is active")
@@ -293,7 +281,6 @@ def handleMovementCommand(line):
         sendCommand(COMMAND_STOP)
     else:
         return
-
         
 # ----------------------------------------------------------------
 # COLOR SENSOR
@@ -301,7 +288,7 @@ def handleMovementCommand(line):
 
 def handleColorCommand():
     """
-    (Activity 2): request a color reading from the Arduino and display it.
+    Request a color reading from the Arduino and display it.
 
     Check the E-Stop state first; if stopped, refuse with a clear message.
     Otherwise, send your color command to the Arduino.
@@ -311,7 +298,6 @@ def handleColorCommand():
         return
     sendCommand(COMMAND_COLOR)
 
-
 # ----------------------------------------------------------------
 # CAMERA
 # ----------------------------------------------------------------
@@ -320,12 +306,12 @@ import alex_camera                  # import the camera library provided (alex_c
 
 print("Initializing camera...")
 _camera = alex_camera.cameraOpen()  # open the camera before first use.
-_frames_remaining = 100       # frames remaining before further captures are refused
+_frames_remaining = 15              # frames remaining before further captures are refused
 
 
 def handleCameraCommand():
     """
-    (Activity 3): capture and display a greyscale frame.
+    Capture and display a greyscale frame.
 
     Gate on E-Stop state and the remaining frame count.
     Use captureGreyscaleFrame() and renderGreyscaleFrame() from alex_camera.
@@ -351,7 +337,6 @@ def handleCameraCommand():
     # Decrease counter and show remaining
     _frames_remaining -= 1
     print(f"Picture displayed! {_frames_remaining} frames remaining.")
-
 
 # ----------------------------------------------------------------
 # LIDAR (discontinued, replaced with SLAM)
@@ -430,19 +415,10 @@ def handleArmCommand(joint, deg):
 # COMMAND-LINE INTERFACE
 # ----------------------------------------------------------------
 
-# User input -> action mapping:
-#   e  send a software E-Stop command to the Arduino (pre-wired)
-#   c  request color reading from the Arduino        (Activity 2 - implement yourself)
-#   p  capture and display a camera frame            (Activity 3 - implement yourself)
-#   l  perform a single LIDAR scan                   (Activity 4 - implement yourself)
-
-
 def handleUserInput(line):
     """
     Dispatch a single line of user input.
-
     The 'e' case is pre-wired to send a software E-Stop command.
-    (Activities 2, 3 & 4): add 'c' (color), 'p' (camera) and 'l' (LIDAR).
     """
     if line == 'e':
         print("Sending E-Stop command...")
@@ -477,7 +453,6 @@ def handleUserInput(line):
         handleArmCommand('home', 0)
     else:
         print(f"Unknown input: '{line}'. Valid: e, c, p, l, w, a, s, d, +, -, q")
-
 
 def runCommandInterface():
     """

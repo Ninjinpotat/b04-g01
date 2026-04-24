@@ -1,13 +1,11 @@
 /*
  * packets.h
- * Studio 13: Sensor Mini-Project
  *
  * TPacket protocol: enums, struct, and framing constants.
  * This file must be kept in sync with the constants in pi_sensor.py.
  */
 
 #pragma once
-
 #include <stdint.h>
 
 // =============================================================

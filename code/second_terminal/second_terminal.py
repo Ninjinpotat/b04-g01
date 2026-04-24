@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-Studio 16: Robot Integration
 second_terminal.py  -  Second operator terminal.
 
-This terminal connects to pi_sensor.py over TCP.  It:
+This terminal connects to pi_sensor.py over TCP. It:
   - Displays every TPacket forwarded from the robot (via pi_sensor.py).
   - Sends a software E-Stop command when you type 'e'.
 
@@ -30,8 +29,7 @@ avoids hard-to-find bugs caused by constants getting out of sync.
 
 Commands
 --------
-  e   Send a software E-Stop to the robot (same as pressing the button).
-  q   Quit.
+    e, q, h, b, s, e, g, v (e-stop + quit + arm commands)
 
 Usage
 -----
@@ -52,7 +50,6 @@ import ssl
 # this file's directory to sys.path automatically.
 from net_utils import TCPClient, sendTPacketFrame, recvTPacketFrame
 
-
 # ---------------------------------------------------------------------------
 # Connection settings
 # ---------------------------------------------------------------------------
@@ -60,7 +57,6 @@ from net_utils import TCPClient, sendTPacketFrame, recvTPacketFrame
 # Change PI_HOST to the Pi's IP address if you run this from a different machine.
 PI_HOST = '100.102.69.94'
 PI_PORT = 65432
-
 
 # ---------------------------------------------------------------------------
 # TPacket constants
@@ -106,7 +102,6 @@ TPACKET_FMT  = f'<BB2x{MAX_STR_LEN}s{PARAMS_COUNT}I'
 MAGIC      = b'\xDE\xAD'
 FRAME_SIZE = len(MAGIC) + TPACKET_SIZE + 1   # = 103
 
-
 # ---------------------------------------------------------------------------
 # TPacket helpers
 # ---------------------------------------------------------------------------
@@ -117,7 +112,6 @@ def _computeChecksum(data: bytes) -> int:
         result ^= b
     return result
 
-
 def _packFrame(packetType, command, data=b'', params=None):
     """Pack a TPacket into a 103-byte framed byte string."""
     if params is None:
@@ -126,7 +120,6 @@ def _packFrame(packetType, command, data=b'', params=None):
     packet_bytes = struct.pack(TPACKET_FMT, packetType, command,
                                data_padded, *params)
     return MAGIC + packet_bytes + bytes([_computeChecksum(packet_bytes)])
-
 
 def _unpackFrame(frame: bytes):
     """Validate checksum and unpack a 103-byte frame.  Returns None if corrupt."""
@@ -143,13 +136,11 @@ def _unpackFrame(frame: bytes):
         'params':     list(fields[3:]),
     }
 
-
 # ---------------------------------------------------------------------------
 # Packet display
 # ---------------------------------------------------------------------------
 
 _estop_active = False
-
 
 def _printPacket(pkt):
     """Pretty-print a TPacket forwarded from the robot."""
@@ -179,20 +170,19 @@ def _printPacket(pkt):
     else:
         print(f"[robot] Packet: type={ptype}, cmd={cmd}")
 
-
 # ---------------------------------------------------------------------------
 # Input handling
 # ---------------------------------------------------------------------------
 
 def _handleInput(line: str, client: TCPClient):
     """Handle one line of keyboard input."""
-    global _estop_active # <--- Tell Python to look at our safety variable!
+    global _estop_active 
 
     line = line.strip().lower()
     if not line:
         return
 
-    # 1. ALLOW 'e' AND 'q' ALWAYS (So we can un-pause or quit)
+    # ALLOW 'e' AND 'q' ALWAYS (So we can un-pause or quit)
     if line == 'e':
         frame = _packFrame(PACKET_TYPE_COMMAND, COMMAND_ESTOP)
         sendTPacketFrame(client.sock, frame)
@@ -203,13 +193,12 @@ def _handleInput(line: str, client: TCPClient):
         print("[second_terminal] Quitting.")
         raise KeyboardInterrupt
 
-    # 2. THE E-STOP GATE
-    # If we get past 'e' and 'q', check the E-Stop state before allowing anything else!
+    # If we get past 'e' and 'q', check the E-Stop state before allowing anything else
     if _estop_active:
         print("[second_terminal] Refused: E-Stop is active")
         return
 
-    # 3. ARM COMMANDS (Only runs if E-Stop is False)
+    # ARM COMMANDS (Only runs if E-Stop is False)
     if line == 'h':
         frame = _packFrame(PACKET_TYPE_COMMAND, COMMAND_ARM_HOME)
         sendTPacketFrame(client.sock, frame)
@@ -222,7 +211,6 @@ def _handleInput(line: str, client: TCPClient):
             print("[second_terminal] Error: Arm command format: <joint><deg> eg. b090")
             return
         
-        # Map the letter to the correct command constant
         cmd_map = {
             'b': COMMAND_ARM_BASE,
             's': COMMAND_ARM_SHOULDER,
@@ -235,7 +223,7 @@ def _handleInput(line: str, client: TCPClient):
         deg = max(0, min(180, deg)) # Constrain angle between 0 and 180
         params = [deg] + [0] * (PARAMS_COUNT - 1)
         
-        # Frame it and send it over the TCP socket to the Pi!
+        # Frame it and send it over the TCP socket to the Pi
         frame = _packFrame(PACKET_TYPE_COMMAND, cmd_map[line[0]], params=params)
         sendTPacketFrame(client.sock, frame)
         print(f"[second_terminal] Sent: {line[0]} to {deg}")
@@ -244,7 +232,6 @@ def _handleInput(line: str, client: TCPClient):
         print(f"[second_terminal] Unknown: '{line}'. "
               f"Valid: e (E-stop), h (Home), b/s/e/g/v + angle, q (quit)")
 
-
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
@@ -252,7 +239,7 @@ def _handleInput(line: str, client: TCPClient):
 def run():
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.load_verify_locations('../certs/server.crt')
-    ctx.check_hostname = False # change to True if using second machine
+    ctx.check_hostname = True # change to True if using second machine
   
     client = TCPClient(host=PI_HOST, port=PI_PORT, ssl_context=ctx)
     print(f"[second_terminal] Connecting to pi_sensor.py at {PI_HOST}:{PI_PORT}...")
@@ -291,7 +278,6 @@ def run():
         print("\n[second_terminal] Exiting.")
     finally:
         client.close()
-
 
 if __name__ == '__main__':
     run()

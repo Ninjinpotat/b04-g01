@@ -1,6 +1,5 @@
 /*
  * sensor_miniproject_template.ino
- * Studio 13: Sensor Mini-Project
  *
  * This sketch is split across three files in this folder:
  *
@@ -22,19 +21,11 @@
 #include "serial_driver.h"
 #include "robotlib.h"
 
-volatile unsigned long lastInterruptTime = 0;
-const unsigned long DEBOUNCE_DELAY = 50; // 50ms between button presses
-volatile uint8_t buttonPhase = 0; // for the button
-volatile uint32_t edgeCount = 0;  // for the color sensor
-volatile uint8_t timerDone = 0;   // also for the color sensor
-unsigned long speed = 150; // (default) motor speed
-
-
 // =============================================================
-// SERVO ARM consts
+// Servo arm consts
 // =============================================================
 
-#define STEP_TICKS 11 //calculated for 1 degree increase
+const int STEP_TICKS = 11; // per degree
 unsigned long lastStep = 0;
 int msPerDeg = 10; // (default) servo speed
 
@@ -55,8 +46,7 @@ int volatile target_state[] = {2300,3666,3688,1750};
 #define E_CHECKPOINT 20000
 #define G_CHECKPOINT 30000
 
-// Ensure you have the sys_ms variable defined at the top of your file
-// from our bare-metal Timer 2 clock!
+// for bare-metal Timer 2 clock
 extern volatile unsigned long sys_ms = 0; 
 
 // =============================================================
@@ -84,15 +74,18 @@ static void sendStatus(TState state) {
 }
 
 // =============================================================
-// E-Stop state machine
+// E-Stop state machine - INT1
 // =============================================================
 
-volatile TState buttonState = STATE_RUNNING;
-volatile bool   stateChanged = false;
+volatile unsigned long  lastInterruptTime = 0;
+const unsigned long     DEBOUNCE_DELAY = 50; 
+volatile uint8_t        buttonPhase = 0; 
+volatile TState         buttonState = STATE_RUNNING;
+volatile bool           stateChanged = false;
 
 ISR(INT1_vect) {
     unsigned long currentInterruptTime = millis();
-    if (currentInterruptTime - lastInterruptTime > DEBOUNCE_DELAY) {
+    if (currentInterruptTime - lastInterruptTime > DEBOUNCE_DELAY) { // debouncing check
         
         // Button reads 0 when pushed DOWN, 1 when released UP
         bool isPressed = ((PIND & (1 << 1)) == 0); 
@@ -123,21 +116,28 @@ ISR(INT1_vect) {
                 buttonPhase = 0;
             }
         }
-        
         lastInterruptTime = currentInterruptTime;
     }
 }
 
 // =============================================================
-// Color sensor (TCS3200) - BARE METAL ON TIMER 2
+// Color sensor (TCS3200) - TIMER2 & INT2
 // =============================================================
+
 // Non-blocking Color Sensor Variables
-enum ColorState { COLOR_IDLE, COLOR_READ_R, COLOR_READ_G, COLOR_READ_B };
+enum ColorState { 
+    COLOR_IDLE, 
+    COLOR_READ_R, 
+    COLOR_READ_G, 
+    COLOR_READ_B 
+};
 ColorState currentColorState = COLOR_IDLE;
 uint32_t red_val = 0, green_val = 0, blue_val = 0;
 bool colorContinuous = true; // Set to true to start sensing immediately
 
-// Variables to handle the 8-bit timer tracking 100ms
+// Variables to track the 100ms window
+volatile uint32_t edgeCount = 0;
+volatile uint8_t timerDone = 0;
 volatile uint8_t color_window_active = 0;
 volatile uint8_t color_ms_count = 0;
 
@@ -146,8 +146,8 @@ static void initTimer2_ColorSensor() {
     TCCR2A = (1 << WGM21); // CTC mode
     TCCR2B = (1 << CS22);  // Prescaler 64
     
-    // 16MHz / 64 = 250,000 ticks per second. 
-    // 250 ticks = 1 millisecond. (250 - 1 = 249)
+    // 16MHz / 64 = 250,000 ticks per second
+    // 250 ticks = 1 millisecond, 250 - 1 = 249
     OCR2A = 249;           
     
     TIMSK2 = (1 << OCIE2A); // Enable compare match interrupt
@@ -215,7 +215,7 @@ static const ColorSample COLOR_TRAINING[] = {
     { 7960, 7720, 7350, "White" },
     { 1740, 1820, 1580, "Brown" },
 };
-static const uint8_t NUM_COLORS = sizeof(COLOR_TRAINING) / sizeof(COLOR_TRAINING[0]);
+static const uint8_t NUM_COLORS = sizeof(COLOR_TRAINING) / sizeof(COLOR_TRAINING[0]); // 5
 
 static const char* classifyColor(uint32_t r, uint32_t g, uint32_t b) {
     uint32_t best_dist = UINT32_MAX;
@@ -236,10 +236,10 @@ static const char* classifyColor(uint32_t r, uint32_t g, uint32_t b) {
     return best_label;
 }
 
-static void updateContinuousColor() {
+static void updateContinuousColor() { // Continuous color measurement
     if (!colorContinuous) return;
 
-    switch (currentColorState) {
+    switch (currentColorState) { // once each case is done it will move to the next case
         case COLOR_IDLE:
             startMeasurement(0, 0); // Start measuring Red
             currentColorState = COLOR_READ_R;
@@ -266,7 +266,7 @@ static void updateContinuousColor() {
                 blue_val = edgeCount * 10;
                 const char* colorLabel = classifyColor(red_val, green_val, blue_val);
 
-                // All 3 channels are done. Send the packet to Pi!
+                // All 3 channels are done, send the packet to Pi
                 TPacket pkt = {0};
                 pkt.packetType = PACKET_TYPE_RESPONSE;
                 pkt.command    = RESP_COLOR;
@@ -285,22 +285,21 @@ static void updateContinuousColor() {
 }
 
 // =============================================================
-// SERVO ARM
+// SERVO ARM - TIMER5 & PORTK
 // =============================================================
 
-int parse3 (const String *s) {
+int parse3 (const String *s) { // convert 3 digit string to int
   if (!s) return -1;
   if (s->length() != 3) return -1;
   if (!isDigit(s->charAt(0)) || !isDigit(s->charAt(1)) || !isDigit(s->charAt(2))) return -1;
   return (s->charAt(0) - '0') * 100 + (s->charAt(1) - '0') * 10 + (s->charAt(2) - '0');
 }
 
-void updateSmoothMotion() {
+void updateSmoothMotion() { // move curr_state smoothly towards target_state
   unsigned long now = millis(); 
-  if (now - lastStep < msPerDeg) {return;}
+  if (now - lastStep < msPerDeg) return; // speed control
    lastStep = now;
-  // Disable interrupts temporarily for safe array updating
-  //cli(); 
+  // cli(); 
   for (int k = 0; k < 4; k++) {
     if (curr_state[k] < target_state[k]) {
       curr_state[k] += STEP_TICKS;
@@ -313,12 +312,10 @@ void updateSmoothMotion() {
         curr_state[k] = target_state[k];
     }
   }
-//   sei(); 
+  // sei(); 
 }
 
-// CHANGED TO TIMER 5 and PORT K
 ISR(TIMER5_COMPB_vect) {
- 
   switch (stagecount) {
     case 0:
       // Turn ON base servo (PORTK bit 0 is A8)
@@ -372,21 +369,13 @@ ISR(TIMER5_COMPB_vect) {
   stagecount++;
 }
 
-// CHANGED TO TIMER 5
-ISR(TIMER5_COMPA_vect) {
-  //updateSmoothMotion();
-}
-
-// Call this from your main setup() function
 void initArmTimer5() {
   // Set PK0, PK1, PK2, PK3 as outputs
   DDRK |= 0b00001111;
- 
-  // Clear all servo pins to LOW
+  // All servo pins to LOW
   PORTK &= ~0b00001111;
  
-  cli(); // Disable interrupts during setup
- 
+  cli();
   // Use CTC mode instead of Fast PWM, mapped to Timer 5
   TCCR5A = 0b00000000;  // No PWM output pins
   TCCR5B = 0b00001010;  // WGM52=1 (CTC), CS51=1 (prescaler=8)
@@ -399,16 +388,19 @@ void initArmTimer5() {
  
   // Enable Compare Match A and B interrupts for Timer 5
   TIMSK5 = 0b00000110;
- 
-  sei(); // Enable interrupts
+  sei();
 }
 
 // =============================================================
 // Command handler
 // =============================================================
 
+// Variables for motor control
+unsigned long speed = 150; 
 dir lastMove = STOP;
 unsigned long lastMoveTime = 0;
+unsigned long lastMoveSpeed = speed;
+
 static void handleCommand(const TPacket *cmd) {
     if (cmd->packetType != PACKET_TYPE_COMMAND) return;
 
@@ -416,267 +408,226 @@ static void handleCommand(const TPacket *cmd) {
         case COMMAND_ESTOP:
             cli();
             if (buttonState == STATE_STOPPED) {
-                // STARTING THE ROBOT VIA SOFTWARE
-                buttonState = STATE_RUNNING;
-                buttonPhase = 0; // WAKE UP: Reset hardware memory to Phase 0
-            } else {
-                // STOPPING THE ROBOT VIA SOFTWARE
-                buttonState = STATE_STOPPED;
-                buttonPhase = 2; // SLEEP: Fast-forward hardware memory to Phase 2 (Pretend it was pressed & released)
+                buttonState = STATE_RUNNING; // SOFTWARE START
+                buttonPhase = 0; 
+            } 
+            else {
+                buttonState = STATE_STOPPED; // SOFTWARE STOP
+                buttonPhase = 2; 
             }
             stateChanged = false;
             sei();
-            
-            {
-                TPacket pkt;
-                memset(&pkt, 0, sizeof(pkt));
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                sendFrame(&pkt);
-            }
+
+            // STOP the motors!
+            if (buttonState == STATE_STOPPED) stop(); 
+
+            // Send RESP_OK back to Pi
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_OK;
+           
+            sendFrame(&pkt);
             sendStatus(buttonState);
-            
-            // Safety: Only hit the brakes if we just STOPPED the robot!
-            if (buttonState == STATE_STOPPED) {
-                stop(); 
-            }
             break;
 
         case COMMAND_COLOR:
-            {
-                // Toggle the continuous sensing on/off
-                colorContinuous = !colorContinuous; 
-                
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                sendFrame(&pkt);
-            }
+            // Toggle the continuous sensing on/off
+            colorContinuous = !colorContinuous; 
+            
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_OK;
+            
+            sendFrame(&pkt);
             break;
         
         case COMMAND_W:
-            {   
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_MOVEMENT;
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_MOVEMENT;
 
-                speed = 150; // Set speed for Forward
-                pkt.params[0] = speed;
-                strncpy(pkt.data, "Forwards", sizeof(pkt.data) - 1);
-                pkt.data[sizeof(pkt.data) - 1] = '\0';
+            speed = lastMoveSpeed; // Set speed for Forward (based on +/- speed control)
+            
+            pkt.params[0] = speed;
+            strncpy(pkt.data, "Forwards", sizeof(pkt.data) - 1);
+            pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                forward(speed);
-                lastMove = GO;
-                lastMoveTime = millis(); // Start the movement timer
-                sendFrame(&pkt);
-            }
+            forward(speed);
+            lastMove = GO;
+            lastMoveTime = millis(); // Start the movement timer
+            
+            sendFrame(&pkt); 
             sendStatus(STATE_RUNNING);
             break;
         
         case COMMAND_A:
-            {   
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_MOVEMENT;
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_MOVEMENT;
 
-                speed = 250; // Set speed for Left Turn
-                pkt.params[0] = speed;
-                strncpy(pkt.data, "Left turn", sizeof(pkt.data) - 1);
-                pkt.data[sizeof(pkt.data) - 1] = '\0';
+            speed = 250; // Set speed for Left Turn (FIXED)
+            
+            pkt.params[0] = speed;
+            strncpy(pkt.data, "Left turn", sizeof(pkt.data) - 1);
+            pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                cw(speed);
-                lastMove = CW;
-                lastMoveTime = millis(); // Start the movement timer
-                sendFrame(&pkt);
-            }
+            cw(speed);
+            lastMove = CW;
+            lastMoveTime = millis(); // Start the movement timer
+            
+            sendFrame(&pkt);
             sendStatus(STATE_RUNNING);
             break;
         
         case COMMAND_S:
-            {   
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_MOVEMENT;
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_MOVEMENT;
 
-                speed = 150; // Set speed for Backwards
-                pkt.params[0]  = speed;
-                strncpy(pkt.data, "Backwards", sizeof(pkt.data) - 1);
-                pkt.data[sizeof(pkt.data) - 1] = '\0';
+            speed = lastMoveSpeed; // Set speed for Backwards (based on +/- speed control)
+            
+            pkt.params[0]  = speed;
+            strncpy(pkt.data, "Backwards", sizeof(pkt.data) - 1);
+            pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                backward(speed);
-                lastMove = BACK;
-                lastMoveTime = millis(); // Start the movement timer
-                sendFrame(&pkt);
-            }
+            backward(speed);
+            lastMove = BACK;
+            lastMoveTime = millis(); // Start the movement timer
+            
+            sendFrame(&pkt);
             sendStatus(STATE_RUNNING);
             break;
         
-        case COMMAND_D:
-            {   
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_MOVEMENT;
+        case COMMAND_D: 
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_MOVEMENT;
 
-                speed = 250; // Set speed for Right Turn
-                pkt.params[0] = speed;
-                strncpy(pkt.data, "Right turn", sizeof(pkt.data) - 1);
-                pkt.data[sizeof(pkt.data) - 1] = '\0';
+            speed = 250; // Set speed for Right Turn (FIXED)
+            
+            pkt.params[0] = speed;
+            strncpy(pkt.data, "Right turn", sizeof(pkt.data) - 1);
+            pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                ccw(speed);
-                lastMove = CCW;
-                lastMoveTime = millis(); // Start the movement timer
-                sendFrame(&pkt);
-            }
+            ccw(speed);
+            lastMove = CCW;
+            lastMoveTime = millis(); // Start the movement timer
+            
+            sendFrame(&pkt);
             sendStatus(STATE_RUNNING);
             break;
         
         case COMMAND_PLUS:
-            {   
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_MOVEMENT;
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_MOVEMENT;
 
-                speed += 10;
-                speed = constrain(speed, 0, 255);
-
-                pkt.params[0] = speed;
-                strncpy(pkt.data, "Increasing speed by 10", sizeof(pkt.data) - 1);
-                pkt.data[sizeof(pkt.data) - 1] = '\0';
-
-                // switch (lastMove) { //execute last movement with updated speed
-                //     case GO:
-                //         forward(speed);
-                //         break;
-                //     case BACK:
-                //         backward(speed);
-                //         break;
-                //     case CCW:
-                //         ccw(speed);
-                //         break;
-                //     case CW:
-                //         cw(speed);
-                //         break;
-                //     case STOP: //do nothing
-                //         break;
-                // }
-                sendFrame(&pkt);
-            }
+            lastMoveSpeed += 10;
+            lastMoveSpeed = constrain(lastMoveSpeed, 0, 255);
+            
+            pkt.params[0] = lastMoveSpeed;
+            strncpy(pkt.data, "Increasing speed by 10", sizeof(pkt.data) - 1);
+            pkt.data[sizeof(pkt.data) - 1] = '\0';
+            
+            sendFrame(&pkt);
             sendStatus(STATE_RUNNING);
             break;
         
         case COMMAND_MINUS:
-            {   
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_MOVEMENT;
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_MOVEMENT;
 
-                speed -= 10;
-                speed = constrain(speed, 0, 255);
-                
-                pkt.params[0] = speed;
-                strncpy(pkt.data, "Decreasing speed by 10", sizeof(pkt.data) - 1);
-                pkt.data[sizeof(pkt.data) - 1] = '\0';
+            lastMoveSpeed -= 10;
+            lastMoveSpeed = constrain(lastMoveSpeed, 0, 255);
+            
+            pkt.params[0] = lastMoveSpeed;
+            strncpy(pkt.data, "Decreasing speed by 10", sizeof(pkt.data) - 1);
+            pkt.data[sizeof(pkt.data) - 1] = '\0';
 
-                // switch (lastMove) { //execute last movement with updated speed
-                //     case GO:
-                //         forward(speed);
-                //         break;
-                //     case BACK:
-                //         backward(speed);
-                //         break;
-                //     case CCW:
-                //         ccw(speed);
-                //         break;
-                //     case CW:
-                //         cw(speed);
-                //         break;
-                //     case STOP: //do nothing
-                //         break;
-                // }
-                sendFrame(&pkt);
-            }
+            sendFrame(&pkt);
             sendStatus(STATE_RUNNING);
             break;
         
         case COMMAND_STOP:
-            {   
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_MOVEMENT;
-                //strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                //pkt.data[sizeof(pkt.data) - 1] = '\0';
-                stop();
-                sendFrame(&pkt);
-            }
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_MOVEMENT;
+            
+            // strncpy(pkt.data, "Stopping", sizeof(pkt.data) - 1);
+            // pkt.data[sizeof(pkt.data) - 1] = '\0';
+            
+            stop();
+            lastMove = STOP;
+            
+            sendFrame(&pkt);
             sendStatus(STATE_RUNNING);
             break;
         
         case COMMAND_ARM_HOME:
-            {
-                target_state[0] = 2800;
-                target_state[1] = 2600;
-                target_state[2] = 3688;
-                target_state[3] = 1750;
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                sendFrame(&pkt);
-                break;
-            }
+            target_state[0] = 2800;
+            target_state[1] = 2600;
+            target_state[2] = 3688;
+            target_state[3] = 1750;
+            
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_OK;
+            
+            sendFrame(&pkt);
+            break;
         
         case COMMAND_ARM_BASE:
-            {
-                int deg = constrain(cmd->params[0], 0, 180);
-                target_state[0] = 1600 + (deg / 180.0) * 3000;
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                sendFrame(&pkt);
-                break;
-            }
+            int deg = constrain(cmd->params[0], 0, 180);
+            target_state[0] = 1600 + (deg / 180.0) * 3000;
+            
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_OK;
+            
+            sendFrame(&pkt);
+            break;
         
         case COMMAND_ARM_SHOULDER:
-            {
-                int deg = constrain(cmd->params[0], 0, 180);
-                target_state[1] = 2000 + (deg / 180.0) * 3110;
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                sendFrame(&pkt);
-                break;
-            }
+            int deg = constrain(cmd->params[0], 0, 180);
+            target_state[1] = 2000 + (deg / 180.0) * 3110;
+            
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_OK;
+            
+            sendFrame(&pkt);
+            break;
         
         case COMMAND_ARM_ELBOW:
-            {
-                int deg = constrain(cmd->params[0], 40, 140);
-                target_state[2] = 2300 + (deg / 180.0) * 2777;
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                sendFrame(&pkt);
-                break;
-            }
+            int deg = constrain(cmd->params[0], 40, 140);
+            target_state[2] = 2300 + (deg / 180.0) * 2777;
+            
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_OK;
+            
+            sendFrame(&pkt);
+            break;
         
         case COMMAND_ARM_GRIPPER:
-            {
-                int deg = constrain(cmd->params[0], 0, 150);
-                target_state[3] = 1450 + (deg / 180.0) * 600;
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                sendFrame(&pkt);
-                break;
-            }
+            int deg = constrain(cmd->params[0], 0, 150);
+            target_state[3] = 1450 + (deg / 180.0) * 600;
+            
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_OK;
+            
+            sendFrame(&pkt);
+            break;
         
         case COMMAND_ARM_SPEED:
-            {
-                msPerDeg = constrain(cmd->params[0], 20, 50);
-                TPacket pkt = {0};
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                sendFrame(&pkt);
-                break;
-            }
+            msPerDeg = constrain(cmd->params[0], 20, 50);
+            TPacket pkt = {0};
+            pkt.packetType = PACKET_TYPE_RESPONSE;
+            pkt.command    = RESP_OK;
+            sendFrame(&pkt);
+            break;
     }
 }
 
@@ -689,24 +640,21 @@ void setup() {
     usartInit(103); 
 
     // E-stop button setup
+    cli();
     DDRD &= ~(1 << 1);  //set PD1 as input
     PORTD |= (1 << 1);  //Enable internal pull-up resistor!
     EICRA = 0b00000100; //trigger INT1 on any logical change
     EIMSK = 0b00000010; //enable INT1
     
-    // --- ADD THESE LINES HERE ---
     initEdgeInterrupt();
     initColorSensorPins();
     initTimer2_ColorSensor();
-
-    //Other setups
-    // 
     initArmTimer5();
     sei();
 }
 
 void loop() {
-    // --- 1. Report any E-Stop state change to the Pi ---
+    // 1. Report any E-Stop state change to the Pi
     if (stateChanged) {
         cli();
         TState state = buttonState;
@@ -715,17 +663,20 @@ void loop() {
         sendStatus(state);
     }
 
-    // --- 2. Process incoming commands from the Pi ---
+    // 2. Process incoming commands from the Pi
     TPacket incoming;
     if (receiveFrame(&incoming)) {
         handleCommand(&incoming);
     }
-    // --- 3. Auto-Stop Timer for Discrete Movements ---
+    
+    // 3. Auto-Stop Timer for Discrete Movements
     // If moving, automatically stop after 300 milliseconds
     if (lastMove != STOP && (millis() - lastMoveTime > 300)) {
         stop();
         lastMove = STOP;
     }
+
+    // 4. update Servo arm and Color sensor
     updateSmoothMotion();
-    updateContinuousColor(); // Add this line!
+    updateContinuousColor();
 }

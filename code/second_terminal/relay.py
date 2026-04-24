@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-Studio 16: Robot Integration
 relay.py  -  Second terminal relay.
 
 This module relays TPacket messages between pi_sensor.py and a second
@@ -37,7 +36,7 @@ import ssl
 # ============================================================
 
 SECOND_TERM_PORT    = 65432   # TCP port second_terminal.py connects to
-SECOND_TERM_TIMEOUT = 300      # Seconds to wait for second_terminal.py to connect
+SECOND_TERM_TIMEOUT = 300     # Seconds to wait for second_terminal.py to connect
 TLS_ENABLED = True
 TLS_CERT_PATH = '../certs/server.crt'
 TLS_KEY_PATH = '../certs/server.key'
@@ -48,7 +47,6 @@ TLS_KEY_PATH = '../certs/server.key'
 
 _st_server = None   # TCPServer waiting for second_terminal.py
 _st_conn   = None   # Active client socket from second_terminal.py
-
 
 # ============================================================
 # Second terminal relay
@@ -70,7 +68,6 @@ def onPacketReceived(raw_frame: bytes):
         if not ok:
             print("[relay] Second terminal disconnected (send failed).")
             _st_conn = None
-
 
 def checkSecondTerminal(serial_port):
     """Receive an incoming command from second_terminal.py and relay it to the Arduino.
