@@ -6,6 +6,8 @@ Team B04-G1, National University of Singapore
 Alex is a tele-operated ground robot built to move through a maze-like arena, detect colour-coded medical supply zones, pick up medpaks with a 4-DoF robotic arm, and map the environment in real time using LIDAR. The robot is controlled by two operators at the same time, and the full mission has to be completed within an 8-minute window.
 
 ---
+### Side profile of Alex with key components labeled
+<img width="499" height="401" alt="Screenshot 2026-05-11 at 10 46 17 PM" src="https://github.com/user-attachments/assets/3cf6cc4b-2a04-4181-b3f6-93e1596d633e" />
 
 ## Table of Contents
 
